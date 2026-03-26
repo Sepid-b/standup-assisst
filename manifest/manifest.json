@@ -1,0 +1,38 @@
+{
+  "$schema": "https://developer.microsoft.com/en-us/json-schemas/teams/v1.16/MicrosoftTeams.schema.json",
+  "manifestVersion": "1.16",
+  "version": "1.0.0",
+  "id": "standup-tab-sepideh-001",
+  "packageName": "com.standup.tab",
+  "developer": {
+    "name": "Sepideh",
+    "websiteUrl": "https://your-app-url.vercel.app",
+    "privacyUrl": "https://your-app-url.vercel.app/privacy",
+    "termsOfUseUrl": "https://your-app-url.vercel.app/terms"
+  },
+  "name": {
+    "short": "Standup",
+    "full": "Sepideh's Standup Tab"
+  },
+  "description": {
+    "short": "Live status, NWG hours and handover docs",
+    "full": "A tab that lets your mentor see your current tasks, time tracked on NWG, blockers and handover docs — no standup meeting needed."
+  },
+  "icons": {
+    "color": "icon-color.png",
+    "outline": "icon-outline.png"
+  },
+  "accentColor": "#6264A7",
+  "configurableTabs": [],
+  "staticTabs": [
+    {
+      "entityId": "standupTab",
+      "name": "Standup",
+      "contentUrl": "https://your-app-url.vercel.app",
+      "websiteUrl": "https://your-app-url.vercel.app",
+      "scopes": ["personal", "groupchat"]
+    }
+  ],
+  "permissions": ["identity", "messageTeamMembers"],
+  "validDomains": ["your-app-url.vercel.app"]
+}

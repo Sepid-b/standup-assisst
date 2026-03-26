@@ -1,0 +1,15 @@
+{
+  "buildCommand": "cd frontend && npm install && npm run build",
+  "outputDirectory": "frontend/dist",
+  "rewrites": [
+    { "source": "/api/status", "destination": "/api/status" },
+    { "source": "/api/projects", "destination": "/api/projects" },
+    { "source": "/api/blockers", "destination": "/api/blockers" },
+    { "source": "/api/blockers/:id", "destination": "/api/blockers?id=:id" },
+    { "source": "/api/tasks/complete", "destination": "/api/tasks" },
+    { "source": "/api/nwg", "destination": "/api/nwg" },
+    { "source": "/api/note", "destination": "/api/note" },
+    { "source": "/api/docs", "destination": "/api/docs" },
+    { "source": "/api/docs/:id", "destination": "/api/docs?id=:id" }
+  ]
+}
