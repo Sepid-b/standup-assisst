@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const BASE = '/api';
+const BASE = import.meta.env.VITE_API_URL || '/api';
 
 export const getStatus            = ()       => axios.get(`${BASE}/status`).then(r => r.data);
 export const updateStatus         = (patch)  => axios.put(`${BASE}/status`, patch).then(r => r.data);
@@ -19,3 +19,6 @@ export const updateOtherProjects  = (projects) => axios.put(`${BASE}/other-proje
 // History endpoints
 export const getHistory           = ()       => axios.get(`${BASE}/history`).then(r => r.data);
 export const saveSnapshot         = (state)  => axios.post(`${BASE}/snapshot`, state).then(r => r.data);
+
+// AI Chat
+export const askAI                = (question) => axios.post(`${BASE}/chat`, { question }).then(r => r.data);

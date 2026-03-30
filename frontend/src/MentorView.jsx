@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { askAI } from './api';
 
 const PURPLE = '#7F77DD';
 const RED    = '#E24B4A';
@@ -42,14 +43,36 @@ export default function MentorView({ data, onRefresh, T, dark }) {
   const nwgState = getNwgState(data.nwgHours, data.nwgTarget);
   const nwgPct   = Math.min(100, (data.nwgHours / data.nwgTarget) * 100);
 
-  const statusLabels = { inprogress: 'In progress', reviewing: 'Sent for review', done: 'Wrapped up', break: 'On a break', blocked: 'Blocked' };
+  // AI Chat state
+  const [chatQuestion, setChatQuestion] = useState('');
+  const [chatMessages, setChatMessages] = useState([]);
+  const [chatLoading, setChatLoading] = useState(false);
+
+  const handleAskAI = async () => {
+    if (!chatQuestion.trim() || chatLoading) return;
+    const question = chatQuestion.trim();
+    setChatQuestion('');
+    setChatMessages(prev => [...prev, { role: 'user', text: question }]);
+    setChatLoading(true);
+    try {
+      const res = await askAI(question);
+      setChatMessages(prev => [...prev, { role: 'assistant', text: res.answer }]);
+    } catch (err) {
+      setChatMessages(prev => [...prev, { role: 'assistant', text: 'Sorry, something went wrong. Please try again.' }]);
+    } finally {
+      setChatLoading(false);
+    }
+  };
+
+  const statusLabels = { inprogress: 'In progress', reviewing: 'Sent for review', done: 'Wrapped up', break: 'On a break', blocked: 'Blocked', custom: data.statusCustom || 'Custom' };
+  const statusDot = { inprogress: '#7F77DD', reviewing: '#BA7517', done: '#1D9E75', break: '#8080a0', blocked: '#E24B4A', custom: '#7F77DD' };
 
   return (
     <div>
       {/* Metric row */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0,1fr))', gap: '10px', marginBottom: '14px' }}>
         <MetricCard T={T} label="Status" value={
-          <><div style={{ width: '7px', height: '7px', borderRadius: '50%', background: PURPLE, flexShrink: 0 }} />{statusLabels[data.status] || 'In progress'}</>
+          <><div style={{ width: '7px', height: '7px', borderRadius: '50%', background: statusDot[data.status] || PURPLE, flexShrink: 0 }} />{statusLabels[data.status] || 'In progress'}</>
         } />
         <MetricCard T={T} label="NWG hours" value={<>{data.nwgHours % 1 === 0 ? data.nwgHours : data.nwgHours.toFixed(1)}<span style={{ fontSize: '11px', color: T.label, fontWeight: 400 }}>/{data.nwgTarget}h</span></>} />
         <MetricCard T={T} label="Active projects" value={data.currentProjects.length} />
@@ -65,24 +88,32 @@ export default function MentorView({ data, onRefresh, T, dark }) {
           {/* Working on today */}
           <Card T={T} accent={PURPLE}>
             <CardLabel color={PURPLE}>Working on today</CardLabel>
-            {data.currentProjects.map(p => (
-              <div key={p.id} style={{ paddingLeft: '12px', borderLeft: `2px solid rgba(127,119,221,0.4)`, marginBottom: '10px', paddingTop: '4px', paddingBottom: '4px' }}>
-                <div style={{ fontSize: '13px', fontWeight: '500', color: T.text, marginBottom: '3px' }}>{p.name}</div>
-                {p.note && <div style={{ fontSize: '11px', color: T.muted }}>{p.note}</div>}
-              </div>
-            ))}
+            {data.currentProjects.length === 0 ? (
+              <div style={{ fontSize: '11px', color: T.muted, padding: '8px 0' }}>No active projects right now.</div>
+            ) : (
+              data.currentProjects.map(p => (
+                <div key={p.id} style={{ paddingLeft: '12px', borderLeft: `2px solid rgba(127,119,221,0.4)`, marginBottom: '10px', paddingTop: '4px', paddingBottom: '4px' }}>
+                  <div style={{ fontSize: '13px', fontWeight: '500', color: T.text, marginBottom: '3px' }}>{p.name}</div>
+                  {p.note && <div style={{ fontSize: '11px', color: T.muted }}>{p.note}</div>}
+                </div>
+              ))
+            )}
           </Card>
 
           {/* Worked on this week */}
           <Card T={T} accent={DPURP}>
             <CardLabel color={PURPLE}>Worked on this week</CardLabel>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              {data.otherProjects.map(p => (
-                <div key={p.id} style={{ padding: '8px 10px', background: T.inner, border: `0.5px solid ${T.border}`, borderRadius: '6px', fontSize: '12px', color: T.text }}>
-                  {p.name}
-                </div>
-              ))}
-            </div>
+            {data.otherProjects.length === 0 ? (
+              <div style={{ fontSize: '11px', color: T.muted, padding: '4px 0' }}>No other projects this week.</div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                {data.otherProjects.map(p => (
+                  <div key={p.id} style={{ padding: '8px 10px', background: T.inner, border: `0.5px solid ${T.border}`, borderRadius: '6px', fontSize: '12px', color: T.text }}>
+                    {p.name}
+                  </div>
+                ))}
+              </div>
+            )}
           </Card>
 
           {/* NWG hours */}
@@ -106,15 +137,19 @@ export default function MentorView({ data, onRefresh, T, dark }) {
           {/* Completed */}
           <Card T={T} accent={GREEN}>
             <CardLabel color={GREEN}>Completed</CardLabel>
-            {data.completedTasks.slice(0, 5).map(t => (
-              <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-                <div style={{ width: '14px', height: '14px', borderRadius: '50%', background: 'rgba(29,158,117,0.2)', border: '0.5px solid rgba(29,158,117,0.5)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <div style={{ width: '5px', height: '5px', borderRadius: '50%', background: GREEN }} />
+            {data.completedTasks.length === 0 ? (
+              <div style={{ fontSize: '11px', color: T.muted, padding: '8px 0' }}>Nothing completed yet.</div>
+            ) : (
+              data.completedTasks.slice(0, 5).map(t => (
+                <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                  <div style={{ width: '14px', height: '14px', borderRadius: '50%', background: 'rgba(29,158,117,0.2)', border: '0.5px solid rgba(29,158,117,0.5)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <div style={{ width: '5px', height: '5px', borderRadius: '50%', background: GREEN }} />
+                  </div>
+                  <span style={{ fontSize: '11px', color: T.text, flex: 1 }}>{t.name}</span>
+                  <span style={{ fontSize: '10px', color: T.label, flexShrink: 0 }}>{t.date}</span>
                 </div>
-                <span style={{ fontSize: '11px', color: T.text, flex: 1 }}>{t.name}</span>
-                <span style={{ fontSize: '10px', color: T.label, flexShrink: 0 }}>{t.date}</span>
-              </div>
-            ))}
+              ))
+            )}
           </Card>
         </div>
 
@@ -142,38 +177,119 @@ export default function MentorView({ data, onRefresh, T, dark }) {
           </Card>
 
           {/* Note from Sepideh */}
-          <Card T={T} accent={PURPLE}>
-            <CardLabel color={PURPLE}>Note from Sepideh</CardLabel>
-            <div style={{ background: 'rgba(127,119,221,0.1)', border: '0.5px solid rgba(127,119,221,0.3)', borderRadius: '6px', padding: '14px 16px' }}>
-              <div style={{ fontSize: '13px', color: T.text, lineHeight: '1.7', fontStyle: 'italic' }}>"{data.note}"</div>
-            </div>
-            {data.lastUpdated && (
-              <div style={{ fontSize: '10px', color: T.label, marginTop: '8px', textAlign: 'right' }}>
-                Sent {new Date(data.lastUpdated).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          {data.note && (
+            <Card T={T} accent={PURPLE}>
+              <CardLabel color={PURPLE}>Note from Sepideh</CardLabel>
+              <div style={{ background: 'rgba(127,119,221,0.1)', border: '0.5px solid rgba(127,119,221,0.3)', borderRadius: '6px', padding: '14px 16px' }}>
+                <div style={{ fontSize: '13px', color: T.text, lineHeight: '1.7', fontStyle: 'italic' }}>"{data.note}"</div>
               </div>
-            )}
-          </Card>
+              {data.lastUpdated && (
+                <div style={{ fontSize: '10px', color: T.label, marginTop: '8px', textAlign: 'right' }}>
+                  Sent {new Date(data.lastUpdated).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </div>
+              )}
+            </Card>
+          )}
 
           {/* Handover docs */}
           <Card T={T} accent={DPURP}>
             <CardLabel color={PURPLE}>Handover docs</CardLabel>
-            {data.handoverDocs.map(doc => {
-              const isLink = !doc.fileType || doc.fileType === 'link';
-              const badge  = isLink ? '↗' : (doc.fileType || 'FILE').toUpperCase().slice(0, 3);
-              return (
-                <div key={doc.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '9px 10px', border: `0.5px solid ${T.border}`, borderRadius: '6px', background: T.inner, marginBottom: '6px', cursor: 'pointer' }}>
-                  <div style={{ width: '22px', height: '22px', borderRadius: '4px', background: 'rgba(127,119,221,0.15)', border: '0.5px solid rgba(127,119,221,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: '9px', color: PURPLE, fontWeight: '600' }}>{badge}</div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: '12px', color: isLink ? PURPLE : T.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{doc.name}</div>
-                    <div style={{ fontSize: '10px', color: T.label }}>{doc.meta}</div>
+            {data.handoverDocs.length === 0 ? (
+              <div style={{ fontSize: '11px', color: T.muted, padding: '4px 0' }}>No handover docs yet.</div>
+            ) : (
+              data.handoverDocs.map(doc => {
+                const isLink = !doc.fileType || doc.fileType === 'link';
+                const badge  = isLink ? '↗' : (doc.fileType || 'FILE').toUpperCase().slice(0, 3);
+                const hasValidUrl = doc.url && doc.url !== '#' && doc.url.trim() !== '';
+                const handleOpenDoc = () => {
+                  if (hasValidUrl) window.open(doc.url, '_blank');
+                };
+                return (
+                  <div key={doc.id} onClick={handleOpenDoc} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '9px 10px', border: `0.5px solid ${T.border}`, borderRadius: '6px', background: T.inner, marginBottom: '6px', cursor: hasValidUrl ? 'pointer' : 'default' }}>
+                    <div style={{ width: '22px', height: '22px', borderRadius: '4px', background: 'rgba(127,119,221,0.15)', border: '0.5px solid rgba(127,119,221,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: '9px', color: PURPLE, fontWeight: '600' }}>{badge}</div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: '12px', color: isLink ? PURPLE : T.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{doc.name}</div>
+                      <div style={{ fontSize: '10px', color: T.label }}>{doc.meta}</div>
+                    </div>
+                    <div onClick={handleOpenDoc} style={{ fontSize: '10px', color: hasValidUrl ? PURPLE : T.label, flexShrink: 0, cursor: hasValidUrl ? 'pointer' : 'default' }}>{isLink ? 'Open ↗' : '↓'}</div>
                   </div>
-                  <div style={{ fontSize: '10px', color: T.label, flexShrink: 0 }}>{isLink ? 'Open ↗' : '↓'}</div>
-                </div>
-              );
-            })}
+                );
+              })
+            )}
           </Card>
         </div>
       </div>
+
+      {/* AI Assistant Chat */}
+      <Card T={T} accent={PURPLE} style={{ marginTop: '16px' }}>
+        <CardLabel color={PURPLE}>Ask AI Assistant</CardLabel>
+        <div style={{ fontSize: '11px', color: T.muted, marginBottom: '12px' }}>
+          Ask questions about Sepideh's progress, NWG hours, completed tasks, or blockers.
+        </div>
+
+        {/* Chat messages */}
+        {chatMessages.length > 0 && (
+          <div style={{ maxHeight: '200px', overflowY: 'auto', marginBottom: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {chatMessages.map((msg, i) => (
+              <div key={i} style={{
+                padding: '10px 12px',
+                borderRadius: '8px',
+                background: msg.role === 'user' ? 'rgba(127,119,221,0.15)' : T.inner,
+                border: `0.5px solid ${msg.role === 'user' ? 'rgba(127,119,221,0.3)' : T.border}`,
+                alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
+                maxWidth: '85%'
+              }}>
+                <div style={{ fontSize: '9px', color: T.label, marginBottom: '4px', textTransform: 'uppercase' }}>
+                  {msg.role === 'user' ? 'You' : 'AI Assistant'}
+                </div>
+                <div style={{ fontSize: '12px', color: T.text, lineHeight: '1.5', whiteSpace: 'pre-wrap' }}>{msg.text}</div>
+              </div>
+            ))}
+            {chatLoading && (
+              <div style={{ padding: '10px 12px', borderRadius: '8px', background: T.inner, border: `0.5px solid ${T.border}`, alignSelf: 'flex-start' }}>
+                <div style={{ fontSize: '12px', color: T.muted }}>Thinking...</div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Input */}
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <input
+            type="text"
+            value={chatQuestion}
+            onChange={e => setChatQuestion(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && handleAskAI()}
+            placeholder="e.g. How many NWG hours this week?"
+            style={{
+              flex: 1,
+              padding: '10px 12px',
+              fontSize: '12px',
+              borderRadius: '6px',
+              border: `1px solid ${T.border}`,
+              background: T.inner,
+              color: T.text,
+              outline: 'none'
+            }}
+          />
+          <button
+            onClick={handleAskAI}
+            disabled={chatLoading || !chatQuestion.trim()}
+            style={{
+              padding: '10px 16px',
+              fontSize: '12px',
+              fontWeight: '500',
+              borderRadius: '6px',
+              border: 'none',
+              background: chatLoading || !chatQuestion.trim() ? T.muted : PURPLE,
+              color: '#fff',
+              cursor: chatLoading || !chatQuestion.trim() ? 'not-allowed' : 'pointer'
+            }}
+          >
+            {chatLoading ? '...' : 'Ask'}
+          </button>
+        </div>
+      </Card>
     </div>
   );
 }

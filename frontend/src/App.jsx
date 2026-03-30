@@ -37,6 +37,7 @@ export default function App() {
   const [dark, setDark]           = useState(true);
   const [showCustomStatus, setShowCustomStatus] = useState(false);
   const [customStatusText, setCustomStatusText] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
   const lastSnapshotRef = useRef(null);
 
   const T = dark ? {
@@ -59,6 +60,14 @@ export default function App() {
 
   const refresh = useCallback(() => {
     getStatus().then(d => { setData(d); setLoading(false); }).catch(() => setLoading(false));
+  }, []);
+
+  const manualRefresh = useCallback(() => {
+    setRefreshing(true);
+    getStatus()
+      .then(d => { setData(d); })
+      .catch(() => {})
+      .finally(() => setTimeout(() => setRefreshing(false), 500));
   }, []);
 
   useEffect(() => { refresh(); }, [refresh]);
@@ -138,6 +147,13 @@ export default function App() {
 
           <div style={{ width: '0.5px', height: '20px', background: T.border }} />
 
+          <button
+            onClick={manualRefresh}
+            disabled={refreshing}
+            style={{ fontSize: '11px', padding: '4px 12px', borderRadius: '20px', border: `0.5px solid ${T.border}`, background: refreshing ? 'rgba(127,119,221,0.15)' : 'transparent', color: refreshing ? '#7F77DD' : T.muted, cursor: refreshing ? 'default' : 'pointer', fontFamily: 'inherit', transition: 'all 0.2s' }}
+          >
+            {refreshing ? '↻ Refreshing...' : '↻ Refresh'}
+          </button>
           <button onClick={() => setDark(d => !d)} style={{ fontSize: '11px', padding: '4px 12px', borderRadius: '20px', border: `0.5px solid ${T.border}`, background: 'transparent', color: T.muted, cursor: 'pointer', fontFamily: 'inherit' }}>
             {dark ? '☀ Light' : '☾ Dark'}
           </button>

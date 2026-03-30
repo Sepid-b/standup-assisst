@@ -1,17 +1,14 @@
+require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const fs = require('fs');
-const path = require('path');
 const { createClient } = require('@supabase/supabase-js');
+const Anthropic = require('@anthropic-ai/sdk');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
-const DATA_FILE = path.join(__dirname, 'data.json');
 
 // Supabase configuration
-const SUPABASE_URL = process.env.SUPABASE_URL || 'https://tfiidornnjexkxyrkgcq.supabase.co';
-const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRmaWlkb3JubmpleGt4eXJrZ2NxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQzNzUwMjcsImV4cCI6MjA4OTk1MTAyN30.75QQbQiROHmPmcuaGxhd9ii2PTekTPc6o7fFHfr4ALY';
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
 
 app.use(cors());
 app.use(express.json());
@@ -30,117 +27,198 @@ const defaultData = {
   lastUpdated: new Date().toISOString()
 };
 
-// ── Load/save helpers ──
-function loadData() {
-  if (!fs.existsSync(DATA_FILE)) {
-    fs.writeFileSync(DATA_FILE, JSON.stringify(defaultData, null, 2));
-    return defaultData;
+// ── Load/save helpers using Supabase ──
+async function loadData() {
+  const { data, error } = await supabase
+    .from('standup_state')
+    .select('state')
+    .eq('id', 1)
+    .single();
+
+  if (error || !data) {
+    // No state exists yet, seed with default and return it
+    console.log('No existing state found, seeding default data...');
+    await saveData(defaultData);
+    return { ...defaultData };
   }
-  return JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
+
+  return data.state;
 }
-function saveData(data) {
-  data.lastUpdated = new Date().toISOString();
-  fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
-  return data;
+
+async function saveData(state) {
+  state.lastUpdated = new Date().toISOString();
+
+  const { error } = await supabase
+    .from('standup_state')
+    .upsert({ id: 1, state: state, updated_at: new Date().toISOString() });
+
+  if (error) {
+    console.error('Error saving state:', error);
+    throw error;
+  }
+
+  return state;
 }
 
 // ── Routes ──
 
 // GET all data
-app.get('/api/status', (req, res) => {
-  res.json(loadData());
+app.get('/api/status', async (req, res) => {
+  try {
+    const data = await loadData();
+    res.json(data);
+  } catch (err) {
+    console.error('GET /api/status error:', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // PUT full status update
-app.put('/api/status', (req, res) => {
-  const data = loadData();
-  const updated = { ...data, ...req.body };
-  res.json(saveData(updated));
+app.put('/api/status', async (req, res) => {
+  try {
+    const data = await loadData();
+    const updated = { ...data, ...req.body };
+    res.json(await saveData(updated));
+  } catch (err) {
+    console.error('PUT /api/status error:', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
-// PATCH current projects
-app.put('/api/projects', (req, res) => {
-  const data = loadData();
-  data.currentProjects = req.body.projects;
-  res.json(saveData(data));
+// PUT current projects
+app.put('/api/projects', async (req, res) => {
+  try {
+    const data = await loadData();
+    data.currentProjects = req.body.projects;
+    res.json(await saveData(data));
+  } catch (err) {
+    console.error('PUT /api/projects error:', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // POST add blocker
-app.post('/api/blockers', (req, res) => {
-  const data = loadData();
-  const blocker = { id: Date.now().toString(), text: req.body.text };
-  data.blockers.push(blocker);
-  res.json(saveData(data));
+app.post('/api/blockers', async (req, res) => {
+  try {
+    const data = await loadData();
+    const blocker = { id: Date.now().toString(), text: req.body.text };
+    data.blockers.push(blocker);
+    res.json(await saveData(data));
+  } catch (err) {
+    console.error('POST /api/blockers error:', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // DELETE blocker
-app.delete('/api/blockers/:id', (req, res) => {
-  const data = loadData();
-  data.blockers = data.blockers.filter(b => b.id !== req.params.id);
-  res.json(saveData(data));
+app.delete('/api/blockers/:id', async (req, res) => {
+  try {
+    const data = await loadData();
+    data.blockers = data.blockers.filter(b => b.id !== req.params.id);
+    res.json(await saveData(data));
+  } catch (err) {
+    console.error('DELETE /api/blockers error:', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // POST complete a task
-app.post('/api/tasks/complete', (req, res) => {
-  const data = loadData();
-  const task = { id: Date.now().toString(), name: req.body.name, date: 'Just now' };
-  data.completedTasks.unshift(task);
-  res.json(saveData(data));
+app.post('/api/tasks/complete', async (req, res) => {
+  try {
+    const data = await loadData();
+    const task = { id: Date.now().toString(), name: req.body.name, date: 'Just now' };
+    data.completedTasks.unshift(task);
+    res.json(await saveData(data));
+  } catch (err) {
+    console.error('POST /api/tasks/complete error:', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // PUT NWG hours
-app.put('/api/nwg', (req, res) => {
-  const data = loadData();
-  data.nwgHours = Math.min(data.nwgTarget + 4, req.body.hours);
-  res.json(saveData(data));
+app.put('/api/nwg', async (req, res) => {
+  try {
+    const data = await loadData();
+    data.nwgHours = Math.min(data.nwgTarget + 4, req.body.hours);
+    res.json(await saveData(data));
+  } catch (err) {
+    console.error('PUT /api/nwg error:', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // PUT note
-app.put('/api/note', (req, res) => {
-  const data = loadData();
-  data.note = req.body.note;
-  res.json(saveData(data));
+app.put('/api/note', async (req, res) => {
+  try {
+    const data = await loadData();
+    data.note = req.body.note;
+    res.json(await saveData(data));
+  } catch (err) {
+    console.error('PUT /api/note error:', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // POST add handover doc
-app.post('/api/docs', (req, res) => {
-  const data = loadData();
-  const doc = { id: Date.now().toString(), ...req.body };
-  data.handoverDocs.push(doc);
-  res.json(saveData(data));
+app.post('/api/docs', async (req, res) => {
+  try {
+    const data = await loadData();
+    const doc = { id: Date.now().toString(), ...req.body };
+    data.handoverDocs.push(doc);
+    res.json(await saveData(data));
+  } catch (err) {
+    console.error('POST /api/docs error:', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // DELETE handover doc
-app.delete('/api/docs/:id', (req, res) => {
-  const data = loadData();
-  data.handoverDocs = data.handoverDocs.filter(d => d.id !== req.params.id);
-  res.json(saveData(data));
-});
-
-app.listen(PORT, () => {
-  console.log(`✅ Standup backend running on http://localhost:${PORT}`);
+app.delete('/api/docs/:id', async (req, res) => {
+  try {
+    const data = await loadData();
+    data.handoverDocs = data.handoverDocs.filter(d => d.id !== req.params.id);
+    res.json(await saveData(data));
+  } catch (err) {
+    console.error('DELETE /api/docs error:', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // PUT other projects
-app.put('/api/other-projects', (req, res) => {
-  const data = loadData();
-  data.otherProjects = req.body.projects;
-  res.json(saveData(data));
+app.put('/api/other-projects', async (req, res) => {
+  try {
+    const data = await loadData();
+    data.otherProjects = req.body.projects;
+    res.json(await saveData(data));
+  } catch (err) {
+    console.error('PUT /api/other-projects error:', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // DELETE completed task
-app.delete('/api/tasks/complete/:id', (req, res) => {
-  const data = loadData();
-  data.completedTasks = data.completedTasks.filter(function(t) { return t.id !== req.params.id; });
-  res.json(saveData(data));
+app.delete('/api/tasks/complete/:id', async (req, res) => {
+  try {
+    const data = await loadData();
+    data.completedTasks = data.completedTasks.filter(t => t.id !== req.params.id);
+    res.json(await saveData(data));
+  } catch (err) {
+    console.error('DELETE /api/tasks/complete error:', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // POST add completed task manually
-app.post('/api/tasks/manual', (req, res) => {
-  const data = loadData();
-  const task = { id: Date.now().toString(), name: req.body.name, date: 'Today' };
-  data.completedTasks.unshift(task);
-  res.json(saveData(data));
+app.post('/api/tasks/manual', async (req, res) => {
+  try {
+    const data = await loadData();
+    const task = { id: Date.now().toString(), name: req.body.name, date: 'Today' };
+    data.completedTasks.unshift(task);
+    res.json(await saveData(data));
+  } catch (err) {
+    console.error('POST /api/tasks/manual error:', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ── Supabase History Endpoints ──
@@ -306,4 +384,82 @@ app.get('/api/history', async (req, res) => {
     console.error('History error:', err);
     res.status(500).json({ error: err.message });
   }
+});
+
+// ── AI Chat Endpoint ──
+const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+app.post('/api/chat', async (req, res) => {
+  try {
+    const { question } = req.body;
+    if (!question) {
+      return res.status(400).json({ error: 'Question is required' });
+    }
+
+    // Fetch current state
+    const { data: stateData } = await supabase
+      .from('standup_state')
+      .select('state')
+      .eq('id', 1)
+      .single();
+
+    // Fetch history (last 30 days)
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const cutoff = thirtyDaysAgo.toISOString().split('T')[0];
+
+    const { data: snapshots } = await supabase
+      .from('standup_snapshots')
+      .select(`
+        id, date, week_start, status, status_custom, nwg_hours, nwg_target, note, created_at,
+        standup_items (id, type, name, item_note, meta, item_date)
+      `)
+      .gte('date', cutoff)
+      .order('date', { ascending: false });
+
+    // Prepare context for Claude
+    const currentState = stateData?.state || {};
+    const historyData = (snapshots || []).map(s => ({
+      date: s.date,
+      weekStart: s.week_start,
+      status: s.status,
+      nwgHours: s.nwg_hours,
+      nwgTarget: s.nwg_target,
+      note: s.note,
+      currentProjects: s.standup_items?.filter(i => i.type === 'current_project').map(i => i.name) || [],
+      completedTasks: s.standup_items?.filter(i => i.type === 'completed_task').map(i => i.name) || [],
+      blockers: s.standup_items?.filter(i => i.type === 'blocker').map(i => i.name) || []
+    }));
+
+    const systemPrompt = `You are a helpful AI assistant for Sepideh's standup app. You help Maria (Sepideh's mentor) understand Sepideh's work progress, NWG hours, completed tasks, and blockers.
+
+Answer questions based on the data provided. Be concise, friendly, and helpful. If you don't have enough data to answer, say so.
+
+Today's date is: ${new Date().toISOString().split('T')[0]}
+
+Current State:
+${JSON.stringify(currentState, null, 2)}
+
+History (last 30 days):
+${JSON.stringify(historyData, null, 2)}`;
+
+    const message = await anthropic.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 1024,
+      system: systemPrompt,
+      messages: [{ role: 'user', content: question }]
+    });
+
+    const answer = message.content[0]?.text || 'Sorry, I could not generate a response.';
+    res.json({ answer });
+
+  } catch (err) {
+    console.error('Chat error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Start server
+app.listen(PORT, () => {
+  console.log(`Standup backend running on http://localhost:${PORT}`);
 });
