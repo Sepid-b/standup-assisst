@@ -280,23 +280,6 @@ export default function MyView({ data, onRefresh, T, dark }) {
               </div>
             )}
             {toasts.done && <div style={{ fontSize: '11px', color: GREEN, marginTop: '8px' }}>✓ Moved to completed!</div>}
-            {(() => {
-              const todayLabel = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
-              const todayTasks = completed.filter(t => t.date === todayLabel || t.date === 'Today');
-              if (todayTasks.length === 0) return null;
-              return (
-                <>
-                  <div style={{ height: '0.5px', background: T.border, margin: '10px 0' }} />
-                  <div style={{ fontSize: '9px', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.08em', color: GREEN, marginBottom: '8px' }}>Done today</div>
-                  {todayTasks.map(t => (
-                    <div key={t.id} style={{ border: `0.5px solid ${T.border}`, borderRadius: '6px', padding: '10px 12px', marginBottom: '8px', background: T.inner, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: GREEN, flexShrink: 0 }} />
-                      <span style={{ fontSize: '12px', color: T.text }}>{t.name}</span>
-                    </div>
-                  ))}
-                </>
-              );
-            })()}
           </Card>
 
           {/* NWG hours */}

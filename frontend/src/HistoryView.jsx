@@ -473,7 +473,8 @@ export default function HistoryView({ T, dark }) {
                       if (seenBlockers.has(b.text)) return false;
                       seenBlockers.add(b.text); return true;
                     });
-                    const docs = snap.handoverDocs || [];
+                    // Only show docs saved in this specific day's snapshot items — never from current state
+                    const docs = Array.isArray(snap.handoverDocs) ? snap.handoverDocs : [];
                     return (
                       <div style={{
                         padding: '16px',
