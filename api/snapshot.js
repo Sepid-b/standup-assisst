@@ -59,6 +59,23 @@ export default async function handler(req, res) {
         snapshotId = created.id;
       }
 
+      // Load yesterday's completed tasks to only save NEW tasks today
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      const yesterdayStr = yesterday.toISOString().split('T')[0];
+
+      const { data: yesterdaySnap } = await supabase
+        .from('standup_snapshots')
+        .select('id, standup_items(type, name)')
+        .eq('date', yesterdayStr)
+        .maybeSingle();
+
+      const yesterdayTaskNames = new Set(
+        (yesterdaySnap?.standup_items || [])
+          .filter(i => i.type === 'completed_task')
+          .map(i => i.name)
+      );
+
       // Insert all items
       const items = [];
 
@@ -72,17 +89,16 @@ export default async function handler(req, res) {
         items.push({ snapshot_id: snapshotId, type: 'other_project', name: p.name });
       });
 
-      // Completed tasks — only include tasks from today
-      const todayTasks = (state.completedTasks || []).filter(t => {
-        if (!t.date) return false;
-        // Legacy string labels (before ISO dates were stored) — treat as today
-        if (t.date === 'Just now' || t.date === 'Today') return true;
-        // ISO date strings — check if they match today
-        return t.date.startsWith(today);
-      });
-      todayTasks.forEach(t => {
-        items.push({ snapshot_id: snapshotId, type: 'completed_task', name: t.name, item_date: t.date });
-      });
+      // Completed tasks — only tasks from today that weren't in yesterday's snapshot
+      (state.completedTasks || [])
+        .filter(t => {
+          if (!t.date) return false;
+          const isToday = t.date === 'Just now' || t.date === 'Today' || t.date.startsWith(today);
+          return isToday && !yesterdayTaskNames.has(t.name);
+        })
+        .forEach(t => {
+          items.push({ snapshot_id: snapshotId, type: 'completed_task', name: t.name, item_date: t.date });
+        });
 
       // Blockers
       (state.blockers || []).forEach(b => {

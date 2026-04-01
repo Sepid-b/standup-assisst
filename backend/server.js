@@ -28,6 +28,16 @@ const defaultData = {
 };
 
 // ── Load/save helpers using Supabase ──
+function getToday() {
+  return new Date().toISOString().split('T')[0];
+}
+
+// Filter state for the client: only return today's completed tasks
+function forClient(state) {
+  const today = getToday();
+  return { ...state, completedTasks: (state.completedTasks || []).filter(t => t.date === today) };
+}
+
 async function loadData() {
   const { data, error } = await supabase
     .from('standup_state')
@@ -42,7 +52,14 @@ async function loadData() {
     return { ...defaultData };
   }
 
-  return data.state;
+  // Prune completed tasks older than 7 days to keep state lean
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - 7);
+  const cutoffStr = cutoff.toISOString().split('T')[0];
+  const state = data.state;
+  state.completedTasks = (state.completedTasks || []).filter(t => t.date >= cutoffStr);
+
+  return state;
 }
 
 async function saveData(state) {
@@ -66,7 +83,7 @@ async function saveData(state) {
 app.get('/api/status', async (req, res) => {
   try {
     const data = await loadData();
-    res.json(data);
+    res.json(forClient(data));
   } catch (err) {
     console.error('GET /api/status error:', err);
     res.status(500).json({ error: err.message });
@@ -78,7 +95,7 @@ app.put('/api/status', async (req, res) => {
   try {
     const data = await loadData();
     const updated = { ...data, ...req.body };
-    res.json(await saveData(updated));
+    res.json(forClient(await saveData(updated)));
   } catch (err) {
     console.error('PUT /api/status error:', err);
     res.status(500).json({ error: err.message });
@@ -90,7 +107,7 @@ app.put('/api/projects', async (req, res) => {
   try {
     const data = await loadData();
     data.currentProjects = req.body.projects;
-    res.json(await saveData(data));
+    res.json(forClient(await saveData(data)));
   } catch (err) {
     console.error('PUT /api/projects error:', err);
     res.status(500).json({ error: err.message });
@@ -103,7 +120,7 @@ app.post('/api/blockers', async (req, res) => {
     const data = await loadData();
     const blocker = { id: Date.now().toString(), text: req.body.text };
     data.blockers.push(blocker);
-    res.json(await saveData(data));
+    res.json(forClient(await saveData(data)));
   } catch (err) {
     console.error('POST /api/blockers error:', err);
     res.status(500).json({ error: err.message });
@@ -115,7 +132,7 @@ app.delete('/api/blockers/:id', async (req, res) => {
   try {
     const data = await loadData();
     data.blockers = data.blockers.filter(b => b.id !== req.params.id);
-    res.json(await saveData(data));
+    res.json(forClient(await saveData(data)));
   } catch (err) {
     console.error('DELETE /api/blockers error:', err);
     res.status(500).json({ error: err.message });
@@ -126,9 +143,9 @@ app.delete('/api/blockers/:id', async (req, res) => {
 app.post('/api/tasks/complete', async (req, res) => {
   try {
     const data = await loadData();
-    const task = { id: Date.now().toString(), name: req.body.name, date: 'Just now' };
+    const task = { id: Date.now().toString(), name: req.body.name, date: getToday() };
     data.completedTasks.unshift(task);
-    res.json(await saveData(data));
+    res.json(forClient(await saveData(data)));
   } catch (err) {
     console.error('POST /api/tasks/complete error:', err);
     res.status(500).json({ error: err.message });
@@ -140,7 +157,7 @@ app.put('/api/nwg', async (req, res) => {
   try {
     const data = await loadData();
     data.nwgHours = Math.min(data.nwgTarget + 4, req.body.hours);
-    res.json(await saveData(data));
+    res.json(forClient(await saveData(data)));
   } catch (err) {
     console.error('PUT /api/nwg error:', err);
     res.status(500).json({ error: err.message });
@@ -152,7 +169,7 @@ app.put('/api/note', async (req, res) => {
   try {
     const data = await loadData();
     data.note = req.body.note;
-    res.json(await saveData(data));
+    res.json(forClient(await saveData(data)));
   } catch (err) {
     console.error('PUT /api/note error:', err);
     res.status(500).json({ error: err.message });
@@ -165,7 +182,7 @@ app.post('/api/docs', async (req, res) => {
     const data = await loadData();
     const doc = { id: Date.now().toString(), ...req.body };
     data.handoverDocs.push(doc);
-    res.json(await saveData(data));
+    res.json(forClient(await saveData(data)));
   } catch (err) {
     console.error('POST /api/docs error:', err);
     res.status(500).json({ error: err.message });
@@ -177,7 +194,7 @@ app.delete('/api/docs/:id', async (req, res) => {
   try {
     const data = await loadData();
     data.handoverDocs = data.handoverDocs.filter(d => d.id !== req.params.id);
-    res.json(await saveData(data));
+    res.json(forClient(await saveData(data)));
   } catch (err) {
     console.error('DELETE /api/docs error:', err);
     res.status(500).json({ error: err.message });
@@ -189,7 +206,7 @@ app.put('/api/other-projects', async (req, res) => {
   try {
     const data = await loadData();
     data.otherProjects = req.body.projects;
-    res.json(await saveData(data));
+    res.json(forClient(await saveData(data)));
   } catch (err) {
     console.error('PUT /api/other-projects error:', err);
     res.status(500).json({ error: err.message });
@@ -201,7 +218,7 @@ app.delete('/api/tasks/complete/:id', async (req, res) => {
   try {
     const data = await loadData();
     data.completedTasks = data.completedTasks.filter(t => t.id !== req.params.id);
-    res.json(await saveData(data));
+    res.json(forClient(await saveData(data)));
   } catch (err) {
     console.error('DELETE /api/tasks/complete error:', err);
     res.status(500).json({ error: err.message });
@@ -212,9 +229,9 @@ app.delete('/api/tasks/complete/:id', async (req, res) => {
 app.post('/api/tasks/manual', async (req, res) => {
   try {
     const data = await loadData();
-    const task = { id: Date.now().toString(), name: req.body.name, date: 'Today' };
+    const task = { id: Date.now().toString(), name: req.body.name, date: getToday() };
     data.completedTasks.unshift(task);
-    res.json(await saveData(data));
+    res.json(forClient(await saveData(data)));
   } catch (err) {
     console.error('POST /api/tasks/manual error:', err);
     res.status(500).json({ error: err.message });
@@ -288,25 +305,44 @@ app.post('/api/snapshot', async (req, res) => {
       snapshotId = created.id;
     }
 
+    // Load yesterday's completed tasks so we only save NEW tasks today
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayStr = yesterday.toISOString().split('T')[0];
+
+    const { data: yesterdaySnap } = await supabase
+      .from('standup_snapshots')
+      .select('id, standup_items(type, name)')
+      .eq('date', yesterdayStr)
+      .maybeSingle();
+
+    const yesterdayTaskNames = new Set(
+      (yesterdaySnap?.standup_items || [])
+        .filter(i => i.type === 'completed_task')
+        .map(i => i.name)
+    );
+
     // Insert all items
     const items = [];
 
-    // Current projects
+    // Current projects (what's being worked on TODAY)
     (state.currentProjects || []).forEach(p => {
       items.push({ snapshot_id: snapshotId, type: 'current_project', name: p.name, item_note: p.note || null });
     });
 
-    // Other projects
+    // Other projects (active this week)
     (state.otherProjects || []).forEach(p => {
       items.push({ snapshot_id: snapshotId, type: 'other_project', name: p.name });
     });
 
-    // Completed tasks
-    (state.completedTasks || []).forEach(t => {
-      items.push({ snapshot_id: snapshotId, type: 'completed_task', name: t.name, item_date: t.date });
-    });
+    // Completed tasks — only tasks from today that weren't in yesterday's snapshot
+    (state.completedTasks || [])
+      .filter(t => (t.date === today || !t.date) && !yesterdayTaskNames.has(t.name))
+      .forEach(t => {
+        items.push({ snapshot_id: snapshotId, type: 'completed_task', name: t.name, item_date: t.date });
+      });
 
-    // Blockers
+    // Blockers (active TODAY)
     (state.blockers || []).forEach(b => {
       items.push({ snapshot_id: snapshotId, type: 'blocker', name: b.text });
     });
