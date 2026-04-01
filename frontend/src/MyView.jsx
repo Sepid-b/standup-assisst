@@ -2,13 +2,27 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   updateProjects, addBlocker, removeBlocker,
   updateNwg, updateNote, addDoc, removeDoc,
-  updateOtherProjects, addTaskManually, removeCompletedTask
+  addTaskManually, removeCompletedTask
 } from './api';
 
 const PURPLE = '#7F77DD';
 const RED    = '#E24B4A';
 const GREEN  = '#1D9E75';
 const DPURP  = '#534AB7';
+
+function formatTaskDate(date) {
+  if (!date) return '';
+  if (date === 'Just now' || date === 'Today') return date;
+  const d = new Date(date);
+  if (isNaN(d)) return date;
+  const diffMs = Date.now() - d.getTime();
+  const diffMin = Math.floor(diffMs / 60000);
+  if (diffMin < 1) return 'Just now';
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffH = Math.floor(diffMin / 60);
+  if (diffH < 24) return `${diffH}h ago`;
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
 
 function Card({ T, accent, children }) {
   return (
@@ -72,7 +86,6 @@ export default function MyView({ data, onRefresh, T, dark }) {
   const [blockers, setBlockers]   = useState(data.blockers);
   const [nwgHours, setNwgHours]   = useState(data.nwgHours);
   const [note, setNote]           = useState(data.note);
-  const [otherProjects, setOther] = useState(data.otherProjects);
   const [completed, setCompleted] = useState(data.completedTasks);
   const [handoverDocs, setDocs]   = useState(data.handoverDocs);
 
@@ -81,7 +94,6 @@ export default function MyView({ data, onRefresh, T, dark }) {
   useEffect(() => { setBlockers(data.blockers); }, [data.blockers]);
   useEffect(() => { setNwgHours(data.nwgHours); }, [data.nwgHours]);
   useEffect(() => { setNote(data.note); }, [data.note]);
-  useEffect(() => { setOther(data.otherProjects); }, [data.otherProjects]);
   useEffect(() => { setCompleted(data.completedTasks); }, [data.completedTasks]);
   useEffect(() => { setDocs(data.handoverDocs); }, [data.handoverDocs]);
 
@@ -100,10 +112,6 @@ export default function MyView({ data, onRefresh, T, dark }) {
   const [customBlocker, setCustomBlocker]   = useState('');
   const [editBlockerId, setEditBlockerId]   = useState(null);
   const [editBlockerText, setEditBlockerText] = useState('');
-  const [showAddOther, setShowAddOther]     = useState(false);
-  const [newOtherName, setNewOtherName]     = useState('');
-  const [editOtherId, setEditOtherId]       = useState(null);
-  const [editOtherName, setEditOtherName]   = useState('');
   const [showAddDoc, setShowAddDoc]         = useState(false);
   const [newDocName, setNewDocName]         = useState('');
   const [newDocMeta, setNewDocMeta]         = useState('');
@@ -160,22 +168,6 @@ export default function MyView({ data, onRefresh, T, dark }) {
   }
   async function resetNwg() { setNwgHours(0); await updateNwg(0); onRefresh(); }
 
-  // ── Other projects ──
-  async function saveOther(list) {
-    setOther(list);
-    await updateOtherProjects(list);
-    onRefresh();
-  }
-  function removeOther(id) { saveOther(otherProjects.filter(p => p.id !== id)); }
-  function addOther() {
-    if (!newOtherName.trim()) return;
-    saveOther([...otherProjects, { id: Date.now().toString(), name: newOtherName.trim(), color: PURPLE }]);
-    setNewOtherName(''); setShowAddOther(false);
-  }
-  function saveEditOther(id) {
-    saveOther(otherProjects.map(p => p.id === id ? { ...p, name: editOtherName } : p));
-    setEditOtherId(null);
-  }
 
   // ── Completed ──
   async function handleAddCompleted() {
@@ -298,43 +290,7 @@ export default function MyView({ data, onRefresh, T, dark }) {
             {toasts.done && <div style={{ fontSize: '11px', color: GREEN, marginTop: '8px' }}>✓ Moved to completed!</div>}
           </Card>
 
-          {/* Other projects */}
-          <Card T={T} accent={DPURP}>
-            <CardHeader color={PURPLE} label="Other projects" action={<AddBtn label="+ Add" onClick={() => setShowAddOther(v => !v)} />} />
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              {otherProjects.length === 0 && !showAddOther && (
-                <div style={{ fontSize: '11px', color: T.muted, padding: '4px 0' }}>No other projects yet.</div>
-              )}
-              {otherProjects.map(p => (
-                <div key={p.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 10px', background: T.inner, border: `0.5px solid ${T.border}`, borderRadius: '6px' }}>
-                  {editOtherId === p.id ? (
-                    <div style={{ display: 'flex', gap: '6px', flex: 1 }}>
-                      <input value={editOtherName} onChange={e => setEditOtherName(e.target.value)} style={{ ...inp(), flex: 1 }} />
-                      <button onClick={() => saveEditOther(p.id)} style={{ fontSize: '10px', padding: '2px 8px', background: PURPLE, color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontFamily: 'inherit' }}>Save</button>
-                      <button onClick={() => setEditOtherId(null)} style={{ fontSize: '10px', padding: '2px 8px', border: `0.5px solid ${T.border}`, color: T.muted, borderRadius: '4px', background: 'transparent', cursor: 'pointer', fontFamily: 'inherit' }}>✕</button>
-                    </div>
-                  ) : (
-                    <>
-                      <span style={{ fontSize: '12px', color: T.text }}>{p.name}</span>
-                      <div style={{ display: 'flex', gap: '4px' }}>
-                        <ABtn label="Edit" color={T.muted} border={T.border} onClick={() => { setEditOtherId(p.id); setEditOtherName(p.name); }} />
-                        <ABtn label="✕" color={RED} border="rgba(226,75,74,0.3)" onClick={() => removeOther(p.id)} />
-                      </div>
-                    </>
-                  )}
-                </div>
-              ))}
-            </div>
-            {showAddOther && (
-              <div style={{ display: 'flex', gap: '6px', marginTop: '8px' }}>
-                <input placeholder="Project name..." value={newOtherName} onChange={e => setNewOtherName(e.target.value)} style={{ ...inp(), flex: 1 }} />
-                <button onClick={addOther} style={{ fontSize: '10px', padding: '4px 10px', background: PURPLE, color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontFamily: 'inherit' }}>Add</button>
-                <button onClick={() => setShowAddOther(false)} style={{ fontSize: '10px', padding: '4px 10px', border: `0.5px solid ${T.border}`, color: T.muted, borderRadius: '4px', background: 'transparent', cursor: 'pointer', fontFamily: 'inherit' }}>✕</button>
-              </div>
-            )}
-          </Card>
-
-          {/* NWG hours — after other projects */}
+          {/* NWG hours */}
           <Card T={T} accent={PURPLE}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
               <div style={{ fontSize: '10px', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.08em', color: PURPLE }}>NWG hours · {data.nwgTarget}h target</div>
@@ -397,7 +353,7 @@ export default function MyView({ data, onRefresh, T, dark }) {
                   </div>
                   <div>
                     <div style={{ fontSize: '11px', color: T.text }}>{t.name}</div>
-                    <div style={{ fontSize: '10px', color: T.label }}>{t.date}</div>
+                    <div style={{ fontSize: '10px', color: T.label }}>{formatTaskDate(t.date)}</div>
                   </div>
                 </div>
                 <ABtn label="✕" color={RED} border="rgba(226,75,74,0.3)" onClick={() => handleRemoveCompleted(t.id)} />

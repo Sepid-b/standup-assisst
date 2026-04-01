@@ -7,7 +7,7 @@ export default async function handler(req, res) {
   try {
     if (req.method === 'POST') {
       const data = await getData();
-      const task = { id: Date.now().toString(), name: req.body.name, date: 'Today' };
+      const task = { id: Date.now().toString(), name: req.body.name, date: new Date().toISOString() };
       data.completedTasks.unshift(task);
       const saved = await setData(data);
       return res.status(200).json(saved);

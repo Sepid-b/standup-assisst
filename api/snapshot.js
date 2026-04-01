@@ -72,8 +72,15 @@ export default async function handler(req, res) {
         items.push({ snapshot_id: snapshotId, type: 'other_project', name: p.name });
       });
 
-      // Completed tasks
-      (state.completedTasks || []).forEach(t => {
+      // Completed tasks — only include tasks from today
+      const todayTasks = (state.completedTasks || []).filter(t => {
+        if (!t.date) return false;
+        // Legacy string labels (before ISO dates were stored) — treat as today
+        if (t.date === 'Just now' || t.date === 'Today') return true;
+        // ISO date strings — check if they match today
+        return t.date.startsWith(today);
+      });
+      todayTasks.forEach(t => {
         items.push({ snapshot_id: snapshotId, type: 'completed_task', name: t.name, item_date: t.date });
       });
 
