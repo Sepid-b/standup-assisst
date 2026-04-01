@@ -457,77 +457,114 @@ export default function HistoryView({ T, dark }) {
                   </div>
 
                   {/* Expanded content */}
-                  {isExpanded && snap && (
-                    <div style={{
-                      padding: '16px',
-                      background: T.card,
-                      border: `0.5px solid ${T.border}`,
-                      borderTop: 'none',
-                      borderLeft: `3px solid ${borderColor}`,
-                      borderRadius: '0 0 6px 6px',
-                      display: 'grid',
-                      gridTemplateColumns: '1fr 1fr 1fr',
-                      gap: '20px'
-                    }}>
-                      {/* Working On */}
-                      <div>
-                        <div style={{ fontSize: '10px', color: PURPLE, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '10px' }}>Working On</div>
-                        {(snap.currentProjects || []).length === 0 ? (
-                          <div style={{ fontSize: '11px', color: T.muted }}>—</div>
-                        ) : (
-                          snap.currentProjects.map((p, i) => (
-                            <div key={i} style={{ paddingLeft: '10px', borderLeft: `2px solid ${PURPLE}60`, marginBottom: '8px' }}>
-                              <div style={{ fontSize: '12px', color: T.text }}>{p.name}</div>
-                              {p.note && <div style={{ fontSize: '11px', color: T.muted }}>{p.note}</div>}
-                            </div>
-                          ))
-                        )}
-                      </div>
+                  {isExpanded && snap && (() => {
+                    const seenProjects = new Set();
+                    const uniqueProjects = (snap.currentProjects || []).filter(p => {
+                      if (seenProjects.has(p.name)) return false;
+                      seenProjects.add(p.name); return true;
+                    });
+                    const seenTasks = new Set();
+                    const uniqueTasks = (snap.completedTasks || []).filter(t => {
+                      if (seenTasks.has(t.name)) return false;
+                      seenTasks.add(t.name); return true;
+                    });
+                    const seenBlockers = new Set();
+                    const uniqueBlockers = (snap.blockers || []).filter(b => {
+                      if (seenBlockers.has(b.text)) return false;
+                      seenBlockers.add(b.text); return true;
+                    });
+                    const docs = snap.handoverDocs || [];
+                    return (
+                      <div style={{
+                        padding: '16px',
+                        background: T.card,
+                        border: `0.5px solid ${T.border}`,
+                        borderTop: 'none',
+                        borderLeft: `3px solid ${borderColor}`,
+                        borderRadius: '0 0 6px 6px',
+                        display: 'grid',
+                        gridTemplateColumns: '1fr 1fr 1fr',
+                        gap: '20px'
+                      }}>
+                        {/* Working On */}
+                        <div>
+                          <div style={{ fontSize: '10px', color: PURPLE, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '10px' }}>Working On</div>
+                          {uniqueProjects.length === 0 ? (
+                            <div style={{ fontSize: '11px', color: T.muted }}>—</div>
+                          ) : (
+                            uniqueProjects.map((p, i) => (
+                              <div key={i} style={{ paddingLeft: '10px', borderLeft: `2px solid ${PURPLE}60`, marginBottom: '8px' }}>
+                                <div style={{ fontSize: '12px', color: T.text }}>{p.name}</div>
+                                {p.note && <div style={{ fontSize: '11px', color: T.muted }}>{p.note}</div>}
+                              </div>
+                            ))
+                          )}
+                        </div>
 
-                      {/* Completed */}
-                      <div>
-                        <div style={{ fontSize: '10px', color: GREEN, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '10px' }}>Completed</div>
-                        {(snap.completedTasks || []).length === 0 ? (
-                          <div style={{ fontSize: '11px', color: T.muted }}>—</div>
-                        ) : (
-                          snap.completedTasks.map((t, i) => (
-                            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
-                              <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: GREEN }} />
-                              <span style={{ fontSize: '11px', color: T.text }}>{t.name}</span>
-                            </div>
-                          ))
-                        )}
-                      </div>
+                        {/* Completed */}
+                        <div>
+                          <div style={{ fontSize: '10px', color: GREEN, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '10px' }}>Completed</div>
+                          {uniqueTasks.length === 0 ? (
+                            <div style={{ fontSize: '11px', color: T.muted }}>—</div>
+                          ) : (
+                            uniqueTasks.map((t, i) => (
+                              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
+                                <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: GREEN }} />
+                                <span style={{ fontSize: '11px', color: T.text }}>{t.name}</span>
+                              </div>
+                            ))
+                          )}
+                        </div>
 
-                      {/* Blockers + Note */}
-                      <div>
-                        <div style={{ fontSize: '10px', color: RED, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '10px' }}>Blockers</div>
-                        {(snap.blockers || []).length === 0 ? (
-                          <div style={{ fontSize: '11px', color: T.muted, marginBottom: '16px' }}>None</div>
-                        ) : (
-                          snap.blockers.map((b, i) => (
-                            <div key={i} style={{
-                              fontSize: '11px',
-                              padding: '8px 10px',
-                              background: 'rgba(226,75,74,0.1)',
-                              border: `0.5px solid ${RED}40`,
-                              borderRadius: '4px',
-                              color: T.text,
-                              marginBottom: '6px'
-                            }}>
-                              {b.text}
-                            </div>
-                          ))
-                        )}
-                        {snap.note && (
-                          <>
-                            <div style={{ fontSize: '10px', color: PURPLE, textTransform: 'uppercase', letterSpacing: '0.05em', marginTop: '16px', marginBottom: '8px' }}>Note to Maria</div>
-                            <div style={{ fontSize: '11px', color: T.muted, fontStyle: 'italic' }}>"{snap.note}"</div>
-                          </>
-                        )}
+                        {/* Blockers + Note + Docs */}
+                        <div>
+                          <div style={{ fontSize: '10px', color: RED, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '10px' }}>Blockers</div>
+                          {uniqueBlockers.length === 0 ? (
+                            <div style={{ fontSize: '11px', color: T.muted, marginBottom: '16px' }}>None</div>
+                          ) : (
+                            uniqueBlockers.map((b, i) => (
+                              <div key={i} style={{
+                                fontSize: '11px',
+                                padding: '8px 10px',
+                                background: 'rgba(226,75,74,0.1)',
+                                border: `0.5px solid ${RED}40`,
+                                borderRadius: '4px',
+                                color: T.text,
+                                marginBottom: '6px'
+                              }}>
+                                {b.text}
+                              </div>
+                            ))
+                          )}
+                          {snap.note && (
+                            <>
+                              <div style={{ fontSize: '10px', color: PURPLE, textTransform: 'uppercase', letterSpacing: '0.05em', marginTop: '16px', marginBottom: '8px' }}>Note to Maria</div>
+                              <div style={{ fontSize: '11px', color: T.muted, fontStyle: 'italic' }}>"{snap.note}"</div>
+                            </>
+                          )}
+                          {docs.length > 0 && (
+                            <>
+                              <div style={{ fontSize: '10px', color: DPURP, textTransform: 'uppercase', letterSpacing: '0.05em', marginTop: '16px', marginBottom: '8px' }}>Docs & links</div>
+                              {docs.map((doc, i) => {
+                                const isLink = doc.url && (doc.url.startsWith('http') || doc.url.startsWith('/'));
+                                const badge = isLink ? '↗' : (doc.meta?.split(' ')[0] || 'FILE');
+                                return (
+                                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '5px' }}>
+                                    <span style={{ fontSize: '9px', padding: '1px 5px', background: 'rgba(127,119,221,0.15)', border: '0.5px solid rgba(127,119,221,0.3)', borderRadius: '3px', color: PURPLE, fontWeight: '600' }}>{badge}</span>
+                                    {doc.url ? (
+                                      <a href={doc.url} target="_blank" rel="noreferrer" style={{ fontSize: '11px', color: PURPLE, textDecoration: 'none' }}>{doc.name}</a>
+                                    ) : (
+                                      <span style={{ fontSize: '11px', color: T.text }}>{doc.name}</span>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    );
+                  })()}
                 </div>
               );
             })}
@@ -567,7 +604,7 @@ export default function HistoryView({ T, dark }) {
           {/* Completed tasks grouped by day */}
           <div style={{ background: T.card, borderRadius: '8px', padding: '16px', border: `0.5px solid ${T.border}` }}>
             <div style={{ fontSize: '10px', color: GREEN, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '12px' }}>
-              Completed This Month
+              Completed This Week
             </div>
             {getWeeksForMonth().flatMap(w => w.snapshots).length === 0 ? (
               <div style={{ fontSize: '11px', color: T.muted }}>No tasks completed</div>
@@ -631,7 +668,7 @@ export default function HistoryView({ T, dark }) {
               {/* All completed tasks */}
               <div style={{ background: T.card, borderRadius: '8px', padding: '16px', border: `0.5px solid ${T.border}`, borderTop: `2px solid ${GREEN}` }}>
                 <div style={{ fontSize: '10px', color: GREEN, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '12px' }}>
-                  All Completed — {formatMonthYear(currentMonth).split(' ')[0]}
+                  Completed This Month
                 </div>
                 <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
                   {stats.allTasks.length === 0 ? (

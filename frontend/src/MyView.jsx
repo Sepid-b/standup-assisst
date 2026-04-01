@@ -288,6 +288,18 @@ export default function MyView({ data, onRefresh, T, dark }) {
               </div>
             )}
             {toasts.done && <div style={{ fontSize: '11px', color: GREEN, marginTop: '8px' }}>✓ Moved to completed!</div>}
+            {completed.length > 0 && (
+              <>
+                <div style={{ height: '0.5px', background: T.border, margin: '10px 0' }} />
+                <div style={{ fontSize: '9px', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.08em', color: GREEN, marginBottom: '8px' }}>Done today</div>
+                {completed.map(t => (
+                  <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                    <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: GREEN, flexShrink: 0 }} />
+                    <span style={{ fontSize: '11px', color: T.muted, textDecoration: 'line-through' }}>{t.name}</span>
+                  </div>
+                ))}
+              </>
+            )}
           </Card>
 
           {/* NWG hours */}

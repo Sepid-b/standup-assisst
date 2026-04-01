@@ -98,21 +98,17 @@ export default function MentorView({ data, onRefresh, T, dark }) {
                 </div>
               ))
             )}
-          </Card>
-
-          {/* Worked on this week */}
-          <Card T={T} accent={DPURP}>
-            <CardLabel color={PURPLE}>Worked on this week</CardLabel>
-            {data.otherProjects.length === 0 ? (
-              <div style={{ fontSize: '11px', color: T.muted, padding: '4px 0' }}>No other projects this week.</div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                {data.otherProjects.map(p => (
-                  <div key={p.id} style={{ padding: '8px 10px', background: T.inner, border: `0.5px solid ${T.border}`, borderRadius: '6px', fontSize: '12px', color: T.text }}>
-                    {p.name}
+            {(data.completedTasks || []).length > 0 && (
+              <>
+                <div style={{ height: '0.5px', background: 'rgba(127,119,221,0.2)', margin: '10px 0' }} />
+                <div style={{ fontSize: '9px', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.08em', color: GREEN, marginBottom: '8px' }}>Done today</div>
+                {(data.completedTasks || []).map((t, i) => (
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                    <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: GREEN, flexShrink: 0 }} />
+                    <span style={{ fontSize: '12px', color: T.muted, textDecoration: 'line-through' }}>{t.name}</span>
                   </div>
                 ))}
-              </div>
+              </>
             )}
           </Card>
 
@@ -134,23 +130,6 @@ export default function MentorView({ data, onRefresh, T, dark }) {
             </div>
           </Card>
 
-          {/* Completed */}
-          <Card T={T} accent={GREEN}>
-            <CardLabel color={GREEN}>Completed</CardLabel>
-            {data.completedTasks.length === 0 ? (
-              <div style={{ fontSize: '11px', color: T.muted, padding: '8px 0' }}>Nothing completed yet.</div>
-            ) : (
-              data.completedTasks.slice(0, 5).map(t => (
-                <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-                  <div style={{ width: '14px', height: '14px', borderRadius: '50%', background: 'rgba(29,158,117,0.2)', border: '0.5px solid rgba(29,158,117,0.5)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <div style={{ width: '5px', height: '5px', borderRadius: '50%', background: GREEN }} />
-                  </div>
-                  <span style={{ fontSize: '11px', color: T.text, flex: 1 }}>{t.name}</span>
-                  <span style={{ fontSize: '10px', color: T.label, flexShrink: 0 }}>{t.date}</span>
-                </div>
-              ))
-            )}
-          </Card>
         </div>
 
         {/* Divider */}
