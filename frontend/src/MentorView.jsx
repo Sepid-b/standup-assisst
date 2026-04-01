@@ -103,9 +103,9 @@ export default function MentorView({ data, onRefresh, T, dark }) {
                 <div style={{ height: '0.5px', background: 'rgba(127,119,221,0.2)', margin: '10px 0' }} />
                 <div style={{ fontSize: '9px', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.08em', color: GREEN, marginBottom: '8px' }}>Done today</div>
                 {(data.completedTasks || []).map((t, i) => (
-                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
-                    <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: GREEN, flexShrink: 0 }} />
-                    <span style={{ fontSize: '12px', color: T.muted, textDecoration: 'line-through' }}>{t.name}</span>
+                  <div key={i} style={{ paddingLeft: '12px', borderLeft: `2px solid rgba(29,158,117,0.4)`, marginBottom: '10px', paddingTop: '4px', paddingBottom: '4px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <div style={{ width: '7px', height: '7px', borderRadius: '50%', background: GREEN, flexShrink: 0 }} />
+                    <span style={{ fontSize: '13px', fontWeight: '500', color: T.text }}>{t.name}</span>
                   </div>
                 ))}
               </>
@@ -128,6 +128,24 @@ export default function MentorView({ data, onRefresh, T, dark }) {
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '9px', color: T.label }}>
               <span>0h</span><span>4h</span><span>8h</span><span>12h</span><span>16h</span>
             </div>
+          </Card>
+
+          {/* Completed this week */}
+          <Card T={T} accent={GREEN}>
+            <CardLabel color={GREEN}>Completed this week</CardLabel>
+            {(data.completedTasks || []).length === 0 ? (
+              <div style={{ fontSize: '11px', color: T.muted, padding: '4px 0' }}>No tasks completed yet today.</div>
+            ) : (
+              (data.completedTasks || []).map((t, i) => (
+                <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: GREEN, flexShrink: 0 }} />
+                    <span style={{ fontSize: '12px', color: T.text }}>{t.name}</span>
+                  </div>
+                  <span style={{ fontSize: '10px', color: T.muted }}>{t.date}</span>
+                </div>
+              ))
+            )}
           </Card>
 
         </div>

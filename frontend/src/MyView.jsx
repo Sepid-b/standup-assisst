@@ -12,16 +12,8 @@ const DPURP  = '#534AB7';
 
 function formatTaskDate(date) {
   if (!date) return '';
-  if (date === 'Just now' || date === 'Today') return date;
-  const d = new Date(date);
-  if (isNaN(d)) return date;
-  const diffMs = Date.now() - d.getTime();
-  const diffMin = Math.floor(diffMs / 60000);
-  if (diffMin < 1) return 'Just now';
-  if (diffMin < 60) return `${diffMin}m ago`;
-  const diffH = Math.floor(diffMin / 60);
-  if (diffH < 24) return `${diffH}h ago`;
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  // Date is now stored as a readable label e.g. "1 Apr" — return as-is
+  return date;
 }
 
 function Card({ T, accent, children }) {
@@ -288,18 +280,23 @@ export default function MyView({ data, onRefresh, T, dark }) {
               </div>
             )}
             {toasts.done && <div style={{ fontSize: '11px', color: GREEN, marginTop: '8px' }}>✓ Moved to completed!</div>}
-            {completed.length > 0 && (
-              <>
-                <div style={{ height: '0.5px', background: T.border, margin: '10px 0' }} />
-                <div style={{ fontSize: '9px', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.08em', color: GREEN, marginBottom: '8px' }}>Done today</div>
-                {completed.map(t => (
-                  <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
-                    <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: GREEN, flexShrink: 0 }} />
-                    <span style={{ fontSize: '11px', color: T.muted, textDecoration: 'line-through' }}>{t.name}</span>
-                  </div>
-                ))}
-              </>
-            )}
+            {(() => {
+              const todayLabel = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+              const todayTasks = completed.filter(t => t.date === todayLabel || t.date === 'Today');
+              if (todayTasks.length === 0) return null;
+              return (
+                <>
+                  <div style={{ height: '0.5px', background: T.border, margin: '10px 0' }} />
+                  <div style={{ fontSize: '9px', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.08em', color: GREEN, marginBottom: '8px' }}>Done today</div>
+                  {todayTasks.map(t => (
+                    <div key={t.id} style={{ border: `0.5px solid ${T.border}`, borderRadius: '6px', padding: '10px 12px', marginBottom: '8px', background: T.inner, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: GREEN, flexShrink: 0 }} />
+                      <span style={{ fontSize: '12px', color: T.text }}>{t.name}</span>
+                    </div>
+                  ))}
+                </>
+              );
+            })()}
           </Card>
 
           {/* NWG hours */}
@@ -344,7 +341,7 @@ export default function MyView({ data, onRefresh, T, dark }) {
 
           {/* Completed */}
           <Card T={T} accent={GREEN}>
-            <CardHeader color={GREEN} label="Completed" action={
+            <CardHeader color={GREEN} label="Completed this week" action={
               <span onClick={() => setShowAddCompleted(v => !v)} style={{ fontSize: '10px', padding: '2px 9px', border: '0.5px solid rgba(29,158,117,0.4)', color: GREEN, borderRadius: '20px', cursor: 'pointer', background: 'rgba(29,158,117,0.08)', userSelect: 'none' }}>+ Add manually</span>
             } />
             {showAddCompleted && (

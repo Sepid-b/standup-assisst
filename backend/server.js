@@ -32,10 +32,15 @@ function getToday() {
   return new Date().toISOString().split('T')[0];
 }
 
+// Human-readable date label, e.g. "1 Apr"
+function getTodayLabel() {
+  return new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+}
+
 // Filter state for the client: only return today's completed tasks
 function forClient(state) {
-  const today = getToday();
-  return { ...state, completedTasks: (state.completedTasks || []).filter(t => t.date === today) };
+  const todayLabel = getTodayLabel();
+  return { ...state, completedTasks: (state.completedTasks || []).filter(t => t.date === todayLabel) };
 }
 
 async function loadData() {
@@ -52,12 +57,10 @@ async function loadData() {
     return { ...defaultData };
   }
 
-  // Prune completed tasks older than 7 days to keep state lean
-  const cutoff = new Date();
-  cutoff.setDate(cutoff.getDate() - 7);
-  const cutoffStr = cutoff.toISOString().split('T')[0];
+  // Prune completed tasks older than 7 days using ID timestamp
+  const cutoffId = (Date.now() - 7 * 24 * 60 * 60 * 1000).toString();
   const state = data.state;
-  state.completedTasks = (state.completedTasks || []).filter(t => t.date >= cutoffStr);
+  state.completedTasks = (state.completedTasks || []).filter(t => !t.id || t.id >= cutoffId);
 
   return state;
 }
@@ -143,7 +146,7 @@ app.delete('/api/blockers/:id', async (req, res) => {
 app.post('/api/tasks/complete', async (req, res) => {
   try {
     const data = await loadData();
-    const task = { id: Date.now().toString(), name: req.body.name, date: getToday() };
+    const task = { id: Date.now().toString(), name: req.body.name, date: getTodayLabel() };
     data.completedTasks.unshift(task);
     res.json(forClient(await saveData(data)));
   } catch (err) {
@@ -180,7 +183,7 @@ app.put('/api/note', async (req, res) => {
 app.post('/api/docs', async (req, res) => {
   try {
     const data = await loadData();
-    const doc = { id: Date.now().toString(), ...req.body };
+    const doc = { id: Date.now().toString(), addedAt: getToday(), ...req.body };
     data.handoverDocs.push(doc);
     res.json(forClient(await saveData(data)));
   } catch (err) {
@@ -229,7 +232,7 @@ app.delete('/api/tasks/complete/:id', async (req, res) => {
 app.post('/api/tasks/manual', async (req, res) => {
   try {
     const data = await loadData();
-    const task = { id: Date.now().toString(), name: req.body.name, date: getToday() };
+    const task = { id: Date.now().toString(), name: req.body.name, date: getTodayLabel() };
     data.completedTasks.unshift(task);
     res.json(forClient(await saveData(data)));
   } catch (err) {
@@ -336,8 +339,9 @@ app.post('/api/snapshot', async (req, res) => {
     });
 
     // Completed tasks — only tasks from today that weren't in yesterday's snapshot
+    const todayLabel = getTodayLabel();
     (state.completedTasks || [])
-      .filter(t => (t.date === today || !t.date) && !yesterdayTaskNames.has(t.name))
+      .filter(t => (t.date === todayLabel || !t.date) && !yesterdayTaskNames.has(t.name))
       .forEach(t => {
         items.push({ snapshot_id: snapshotId, type: 'completed_task', name: t.name, item_date: t.date });
       });
@@ -347,8 +351,8 @@ app.post('/api/snapshot', async (req, res) => {
       items.push({ snapshot_id: snapshotId, type: 'blocker', name: b.text });
     });
 
-    // Handover docs
-    (state.handoverDocs || []).forEach(d => {
+    // Handover docs — only docs added today
+    (state.handoverDocs || []).filter(d => d.addedAt === today).forEach(d => {
       items.push({ snapshot_id: snapshotId, type: 'handover_doc', name: d.name, meta: d.meta, item_note: d.url });
     });
 

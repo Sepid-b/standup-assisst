@@ -90,10 +90,11 @@ export default async function handler(req, res) {
       });
 
       // Completed tasks — only tasks from today that weren't in yesterday's snapshot
+      const todayLabel = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
       (state.completedTasks || [])
         .filter(t => {
           if (!t.date) return false;
-          const isToday = t.date === 'Just now' || t.date === 'Today' || t.date.startsWith(today);
+          const isToday = t.date === 'Just now' || t.date === 'Today' || t.date === todayLabel || t.date.startsWith(today);
           return isToday && !yesterdayTaskNames.has(t.name);
         })
         .forEach(t => {
