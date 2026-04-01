@@ -37,10 +37,9 @@ function getTodayLabel() {
   return new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 }
 
-// Filter state for the client: only return today's completed tasks
+// Return state for the client — all completed tasks for the week
 function forClient(state) {
-  const todayLabel = getTodayLabel();
-  return { ...state, completedTasks: (state.completedTasks || []).filter(t => t.date === todayLabel) };
+  return { ...state, completedTasks: (state.completedTasks || []) };
 }
 
 async function loadData() {

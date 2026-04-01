@@ -7,9 +7,7 @@ export default async function handler(req, res) {
   try {
     if (req.method === 'GET') {
       const data = await getData();
-      const todayLabel = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
-      const filtered = { ...data, completedTasks: (data.completedTasks || []).filter(t => t.date === todayLabel) };
-      return res.status(200).json(filtered);
+      return res.status(200).json(data);
     }
 
     if (req.method === 'PUT') {
