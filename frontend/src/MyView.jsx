@@ -12,7 +12,11 @@ const DPURP  = '#534AB7';
 
 function formatTaskDate(date) {
   if (!date) return '';
-  // Convert stored "2 Apr" format → display "Apr 2"
+  const d = new Date(date);
+  if (!isNaN(d.getTime())) {
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  }
+  // Already a readable label like "2 Apr" — reformat to "Apr 2"
   const parts = date.trim().split(' ');
   if (parts.length === 2 && !isNaN(parseInt(parts[0]))) return `${parts[1]} ${parts[0]}`;
   return date;
