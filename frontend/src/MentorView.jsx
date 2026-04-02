@@ -42,6 +42,8 @@ function getNwgState(hours, target) {
 export default function MentorView({ data, onRefresh, T, dark }) {
   const nwgState = getNwgState(data.nwgHours, data.nwgTarget);
   const nwgPct   = Math.min(100, (data.nwgHours / data.nwgTarget) * 100);
+  const todayLabel = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+  const doneTodayTasks = (data.completedTasks || []).filter(t => t.date === todayLabel || t.date === 'Just now' || t.date === 'Today');
 
   // AI Chat state
   const [chatQuestion, setChatQuestion] = useState('');
@@ -98,11 +100,11 @@ export default function MentorView({ data, onRefresh, T, dark }) {
                 </div>
               ))
             )}
-            {(data.completedTasks || []).length > 0 && (
+            {doneTodayTasks.length > 0 && (
               <>
                 <div style={{ height: '0.5px', background: 'rgba(127,119,221,0.2)', margin: '10px 0' }} />
                 <div style={{ fontSize: '9px', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.08em', color: GREEN, marginBottom: '8px' }}>Done today</div>
-                {(data.completedTasks || []).map((t, i) => (
+                {doneTodayTasks.map((t, i) => (
                   <div key={i} style={{ paddingLeft: '12px', borderLeft: `2px solid rgba(29,158,117,0.4)`, marginBottom: '10px', paddingTop: '4px', paddingBottom: '4px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <div style={{ width: '7px', height: '7px', borderRadius: '50%', background: GREEN, flexShrink: 0 }} />
                     <span style={{ fontSize: '13px', fontWeight: '500', color: T.text }}>{t.name}</span>

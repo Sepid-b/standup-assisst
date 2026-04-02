@@ -6,9 +6,9 @@
   "packageName": "com.standup.tab",
   "developer": {
     "name": "Sepideh",
-    "websiteUrl": "https://your-app-url.vercel.app",
-    "privacyUrl": "https://your-app-url.vercel.app/privacy",
-    "termsOfUseUrl": "https://your-app-url.vercel.app/terms"
+    "websiteUrl": "https://standup-app-beryl.vercel.app",
+    "privacyUrl": "https://standup-app-beryl.vercel.app/privacy",
+    "termsOfUseUrl": "https://standup-app-beryl.vercel.app/terms"
   },
   "name": {
     "short": "Standup",
@@ -28,11 +28,11 @@
     {
       "entityId": "standupTab",
       "name": "Standup",
-      "contentUrl": "https://your-app-url.vercel.app",
-      "websiteUrl": "https://your-app-url.vercel.app",
+      "contentUrl": "https://standup-app-beryl.vercel.app",
+      "websiteUrl": "https://standup-app-beryl.vercel.app",
       "scopes": ["personal", "groupchat"]
     }
   ],
   "permissions": ["identity", "messageTeamMembers"],
-  "validDomains": ["your-app-url.vercel.app"]
+  "validDomains": ["standup-app-beryl.vercel.app"]
 }
