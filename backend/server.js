@@ -62,16 +62,53 @@ async function loadData() {
   // Prune completed tasks older than 7 days
   state.completedTasks = (state.completedTasks || []).filter(t => !t.id || t.id >= cutoffId);
 
-  // Convert legacy 'Today'/'Just now' dates to actual date labels using task ID as timestamp
+  // Step 1: Convert legacy 'Today'/'Just now' dates using task ID as timestamp
+  let fixedAny = false;
   state.completedTasks = state.completedTasks.map(t => {
-    if ((t.date === 'Today' || t.date === 'Just now') && t.id) {
+    if ((t.date === 'Today' || t.date === 'Just now' || !t.date) && t.id) {
       const ts = parseInt(t.id, 10);
       if (!isNaN(ts) && ts > 1_000_000_000_000) {
+        fixedAny = true;
         return { ...t, date: new Date(ts).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) };
       }
     }
     return t;
   });
+
+  // Step 2: For tasks still missing proper dates, look up in Supabase snapshots
+  const stillLegacy = state.completedTasks.filter(t => !t.date || t.date === 'Today' || t.date === 'Just now');
+  if (stillLegacy.length > 0) {
+    const names = [...new Set(stillLegacy.map(t => t.name))];
+    const { data: snapshots } = await supabase
+      .from('standup_snapshots')
+      .select('date, standup_items(name, type)')
+      .order('date', { ascending: true });
+
+    // Build name → earliest snapshot date map
+    const dateMap = {};
+    (snapshots || []).forEach(snap => {
+      (snap.standup_items || [])
+        .filter(i => i.type === 'completed_task' && names.includes(i.name))
+        .forEach(i => {
+          if (!dateMap[i.name]) {
+            dateMap[i.name] = new Date(snap.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+          }
+        });
+    });
+
+    state.completedTasks = state.completedTasks.map(t => {
+      if ((!t.date || t.date === 'Today' || t.date === 'Just now') && dateMap[t.name]) {
+        fixedAny = true;
+        return { ...t, date: dateMap[t.name] };
+      }
+      return t;
+    });
+  }
+
+  // Persist fixed dates so we don't repeat the lookup on every request
+  if (fixedAny) {
+    await saveData(state);
+  }
 
   return state;
 }

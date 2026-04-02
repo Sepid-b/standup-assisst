@@ -10,16 +10,23 @@ const RED    = '#E24B4A';
 const GREEN  = '#1D9E75';
 const DPURP  = '#534AB7';
 
+const _todayLabel = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+
 function formatTaskDate(date) {
-  if (!date) return '';
+  if (!date || date === 'Today' || date === 'Just now') return null;
   const d = new Date(date);
   if (!isNaN(d.getTime())) {
+    const label = d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+    if (label === _todayLabel) return 'Today';
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   }
-  // Already a readable label like "2 Apr" — reformat to "Apr 2"
+  // Readable label like "2 Apr" — reformat to "Apr 2"
   const parts = date.trim().split(' ');
-  if (parts.length === 2 && !isNaN(parseInt(parts[0]))) return `${parts[1]} ${parts[0]}`;
-  return date;
+  if (parts.length === 2 && !isNaN(parseInt(parts[0]))) {
+    if (date === _todayLabel) return 'Today';
+    return `${parts[1]} ${parts[0]}`;
+  }
+  return null;
 }
 
 function Card({ T, accent, children }) {
@@ -351,7 +358,9 @@ export default function MyView({ data, onRefresh, T, dark }) {
                   </div>
                   <div>
                     <div style={{ fontSize: '11px', color: T.text }}>{t.name}</div>
-                    <div style={{ fontSize: '10px', color: T.label }}>{formatTaskDate(t.date)}</div>
+                    <div style={{ fontSize: '10px', color: formatTaskDate(t.date) ? T.label : T.muted }}>
+                      {formatTaskDate(t.date) || 'No date'}
+                    </div>
                   </div>
                 </div>
                 <ABtn label="✕" color={RED} border="rgba(226,75,74,0.3)" onClick={() => handleRemoveCompleted(t.id)} />

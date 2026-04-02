@@ -39,16 +39,23 @@ function getNwgState(hours, target) {
   return { label: `${rem.toFixed(1)}h to go` };
 }
 
+const _todayLabel = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+
 function fmtDate(date) {
-  if (!date) return '';
+  if (!date || date === 'Today' || date === 'Just now') return null;
   const d = new Date(date);
   if (!isNaN(d.getTime())) {
+    const label = d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+    if (label === _todayLabel) return 'Today';
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   }
-  // Already a readable label like "2 Apr" — reformat to "Apr 2"
+  // Readable label like "2 Apr" — reformat to "Apr 2"
   const parts = date.trim().split(' ');
-  if (parts.length === 2 && !isNaN(parseInt(parts[0]))) return `${parts[1]} ${parts[0]}`;
-  return date;
+  if (parts.length === 2 && !isNaN(parseInt(parts[0]))) {
+    if (date === _todayLabel) return 'Today';
+    return `${parts[1]} ${parts[0]}`;
+  }
+  return null;
 }
 
 export default function MentorView({ data, onRefresh, T, dark }) {
@@ -142,7 +149,9 @@ export default function MentorView({ data, onRefresh, T, dark }) {
                     <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: GREEN, flexShrink: 0 }} />
                     <span style={{ fontSize: '12px', color: T.text }}>{t.name}</span>
                   </div>
-                  <span style={{ fontSize: '10px', color: T.muted }}>{fmtDate(t.date)}</span>
+                  <span style={{ fontSize: '10px', color: fmtDate(t.date) ? T.muted : T.label }}>
+                    {fmtDate(t.date) || 'No date'}
+                  </span>
                 </div>
               ))
             )}
