@@ -56,10 +56,22 @@ async function loadData() {
     return { ...defaultData };
   }
 
-  // Prune completed tasks older than 7 days using ID timestamp
   const cutoffId = (Date.now() - 7 * 24 * 60 * 60 * 1000).toString();
   const state = data.state;
+
+  // Prune completed tasks older than 7 days
   state.completedTasks = (state.completedTasks || []).filter(t => !t.id || t.id >= cutoffId);
+
+  // Convert legacy 'Today'/'Just now' dates to actual date labels using task ID as timestamp
+  state.completedTasks = state.completedTasks.map(t => {
+    if ((t.date === 'Today' || t.date === 'Just now') && t.id) {
+      const ts = parseInt(t.id, 10);
+      if (!isNaN(ts) && ts > 1_000_000_000_000) {
+        return { ...t, date: new Date(ts).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) };
+      }
+    }
+    return t;
+  });
 
   return state;
 }
@@ -258,12 +270,14 @@ app.post('/api/snapshot', async (req, res) => {
     const today = new Date().toISOString().split('T')[0];
     const weekStart = getWeekStart(new Date());
 
-    // Check if snapshot exists for today
+    // Check if snapshot exists for today (limit+maybeSingle handles duplicate rows safely)
     const { data: existing } = await supabase
       .from('standup_snapshots')
       .select('id')
       .eq('date', today)
-      .single();
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
     let snapshotId;
 
@@ -337,10 +351,10 @@ app.post('/api/snapshot', async (req, res) => {
       items.push({ snapshot_id: snapshotId, type: 'other_project', name: p.name });
     });
 
-    // Completed tasks — only tasks from today that weren't in yesterday's snapshot
+    // Completed tasks — only tasks completed TODAY (matching today's date label exactly)
     const todayLabel = getTodayLabel();
     (state.completedTasks || [])
-      .filter(t => (t.date === todayLabel || !t.date) && !yesterdayTaskNames.has(t.name))
+      .filter(t => t.date === todayLabel && !yesterdayTaskNames.has(t.name))
       .forEach(t => {
         items.push({ snapshot_id: snapshotId, type: 'completed_task', name: t.name, item_date: t.date });
       });

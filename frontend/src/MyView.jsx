@@ -12,7 +12,9 @@ const DPURP  = '#534AB7';
 
 function formatTaskDate(date) {
   if (!date) return '';
-  // Date is now stored as a readable label e.g. "1 Apr" — return as-is
+  // Convert stored "2 Apr" format → display "Apr 2"
+  const parts = date.trim().split(' ');
+  if (parts.length === 2 && !isNaN(parseInt(parts[0]))) return `${parts[1]} ${parts[0]}`;
   return date;
 }
 

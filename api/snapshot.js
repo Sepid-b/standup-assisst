@@ -12,12 +12,14 @@ export default async function handler(req, res) {
       const today = new Date().toISOString().split('T')[0];
       const weekStart = getWeekStart(new Date());
 
-      // Check if snapshot exists for today
+      // Check if snapshot exists for today (use limit+maybeSingle to handle duplicate rows safely)
       const { data: existing } = await supabase
         .from('standup_snapshots')
         .select('id')
         .eq('date', today)
-        .single();
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
 
       let snapshotId;
 
@@ -89,25 +91,21 @@ export default async function handler(req, res) {
         items.push({ snapshot_id: snapshotId, type: 'other_project', name: p.name });
       });
 
-      // Completed tasks — only tasks from today that weren't in yesterday's snapshot
+      // Completed tasks — only tasks completed TODAY (matching today's date label exactly)
       const todayLabel = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
       (state.completedTasks || [])
-        .filter(t => {
-          if (!t.date) return false;
-          const isToday = t.date === 'Just now' || t.date === 'Today' || t.date === todayLabel || t.date.startsWith(today);
-          return isToday && !yesterdayTaskNames.has(t.name);
-        })
+        .filter(t => t.date === todayLabel && !yesterdayTaskNames.has(t.name))
         .forEach(t => {
           items.push({ snapshot_id: snapshotId, type: 'completed_task', name: t.name, item_date: t.date });
         });
 
-      // Blockers
+      // Blockers (current active blockers)
       (state.blockers || []).forEach(b => {
         items.push({ snapshot_id: snapshotId, type: 'blocker', name: b.text });
       });
 
-      // Handover docs
-      (state.handoverDocs || []).forEach(d => {
+      // Handover docs — only docs added today
+      (state.handoverDocs || []).filter(d => d.addedAt === today).forEach(d => {
         items.push({ snapshot_id: snapshotId, type: 'handover_doc', name: d.name, meta: d.meta, item_note: d.url });
       });
 

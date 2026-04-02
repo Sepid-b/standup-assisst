@@ -39,11 +39,16 @@ function getNwgState(hours, target) {
   return { label: `${rem.toFixed(1)}h to go` };
 }
 
+function fmtDate(date) {
+  if (!date) return '';
+  const parts = date.trim().split(' ');
+  if (parts.length === 2 && !isNaN(parseInt(parts[0]))) return `${parts[1]} ${parts[0]}`;
+  return date;
+}
+
 export default function MentorView({ data, onRefresh, T, dark }) {
   const nwgState = getNwgState(data.nwgHours, data.nwgTarget);
   const nwgPct   = Math.min(100, (data.nwgHours / data.nwgTarget) * 100);
-  const todayLabel = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
-  const doneTodayTasks = (data.completedTasks || []).filter(t => t.date === todayLabel || t.date === 'Just now' || t.date === 'Today');
 
   // AI Chat state
   const [chatQuestion, setChatQuestion] = useState('');
@@ -100,18 +105,6 @@ export default function MentorView({ data, onRefresh, T, dark }) {
                 </div>
               ))
             )}
-            {doneTodayTasks.length > 0 && (
-              <>
-                <div style={{ height: '0.5px', background: 'rgba(127,119,221,0.2)', margin: '10px 0' }} />
-                <div style={{ fontSize: '9px', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.08em', color: GREEN, marginBottom: '8px' }}>Done today</div>
-                {doneTodayTasks.map((t, i) => (
-                  <div key={i} style={{ paddingLeft: '12px', borderLeft: `2px solid rgba(29,158,117,0.4)`, marginBottom: '10px', paddingTop: '4px', paddingBottom: '4px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <div style={{ width: '7px', height: '7px', borderRadius: '50%', background: GREEN, flexShrink: 0 }} />
-                    <span style={{ fontSize: '13px', fontWeight: '500', color: T.text }}>{t.name}</span>
-                  </div>
-                ))}
-              </>
-            )}
           </Card>
 
           {/* NWG hours */}
@@ -136,7 +129,7 @@ export default function MentorView({ data, onRefresh, T, dark }) {
           <Card T={T} accent={GREEN}>
             <CardLabel color={GREEN}>Completed this week</CardLabel>
             {(data.completedTasks || []).length === 0 ? (
-              <div style={{ fontSize: '11px', color: T.muted, padding: '4px 0' }}>No tasks completed yet today.</div>
+              <div style={{ fontSize: '11px', color: T.muted, padding: '4px 0' }}>No tasks completed this week.</div>
             ) : (
               (data.completedTasks || []).map((t, i) => (
                 <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
@@ -144,7 +137,7 @@ export default function MentorView({ data, onRefresh, T, dark }) {
                     <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: GREEN, flexShrink: 0 }} />
                     <span style={{ fontSize: '12px', color: T.text }}>{t.name}</span>
                   </div>
-                  <span style={{ fontSize: '10px', color: T.muted }}>{t.date}</span>
+                  <span style={{ fontSize: '10px', color: T.muted }}>{fmtDate(t.date)}</span>
                 </div>
               ))
             )}

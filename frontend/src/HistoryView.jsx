@@ -142,15 +142,21 @@ export default function HistoryView({ T, dark }) {
   const [expandedDays, setExpandedDays] = useState({});
 
   useEffect(() => {
-    getHistory()
+    const load = () => getHistory()
       .then(data => {
         setHistory(data || []);
         setLoading(false);
-        // Expand today by default
-        const today = new Date().toISOString().split('T')[0];
-        setExpandedDays({ [today]: true });
       })
       .catch(() => setLoading(false));
+
+    load();
+    // Expand today by default on first load
+    const today = new Date().toISOString().split('T')[0];
+    setExpandedDays({ [today]: true });
+
+    // Refresh every 15s so today's entry stays in sync with live state (Rule 6)
+    const interval = setInterval(load, 15000);
+    return () => clearInterval(interval);
   }, []);
 
   // ── Data Processing ──
@@ -521,7 +527,7 @@ export default function HistoryView({ T, dark }) {
                         <div>
                           <div style={{ fontSize: '10px', color: RED, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '10px' }}>Blockers</div>
                           {uniqueBlockers.length === 0 ? (
-                            <div style={{ fontSize: '11px', color: T.muted, marginBottom: '16px' }}>None</div>
+                            <div style={{ fontSize: '11px', color: T.muted, marginBottom: '16px' }}>No blockers</div>
                           ) : (
                             uniqueBlockers.map((b, i) => (
                               <div key={i} style={{
@@ -543,24 +549,24 @@ export default function HistoryView({ T, dark }) {
                               <div style={{ fontSize: '11px', color: T.muted, fontStyle: 'italic' }}>"{snap.note}"</div>
                             </>
                           )}
-                          {docs.length > 0 && (
-                            <>
-                              <div style={{ fontSize: '10px', color: DPURP, textTransform: 'uppercase', letterSpacing: '0.05em', marginTop: '16px', marginBottom: '8px' }}>Docs & links</div>
-                              {docs.map((doc, i) => {
-                                const isLink = doc.url && (doc.url.startsWith('http') || doc.url.startsWith('/'));
-                                const badge = isLink ? '↗' : (doc.meta?.split(' ')[0] || 'FILE');
-                                return (
-                                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '5px' }}>
-                                    <span style={{ fontSize: '9px', padding: '1px 5px', background: 'rgba(127,119,221,0.15)', border: '0.5px solid rgba(127,119,221,0.3)', borderRadius: '3px', color: PURPLE, fontWeight: '600' }}>{badge}</span>
-                                    {doc.url ? (
-                                      <a href={doc.url} target="_blank" rel="noreferrer" style={{ fontSize: '11px', color: PURPLE, textDecoration: 'none' }}>{doc.name}</a>
-                                    ) : (
-                                      <span style={{ fontSize: '11px', color: T.text }}>{doc.name}</span>
-                                    )}
-                                  </div>
-                                );
-                              })}
-                            </>
+                          <div style={{ fontSize: '10px', color: DPURP, textTransform: 'uppercase', letterSpacing: '0.05em', marginTop: '16px', marginBottom: '8px' }}>Docs & links</div>
+                          {docs.length === 0 ? (
+                            <div style={{ fontSize: '11px', color: T.muted }}>No docs and links</div>
+                          ) : (
+                            docs.map((doc, i) => {
+                              const isLink = doc.url && (doc.url.startsWith('http') || doc.url.startsWith('/'));
+                              const badge = isLink ? '↗' : (doc.meta?.split(' ')[0] || 'FILE');
+                              return (
+                                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '5px' }}>
+                                  <span style={{ fontSize: '9px', padding: '1px 5px', background: 'rgba(127,119,221,0.15)', border: '0.5px solid rgba(127,119,221,0.3)', borderRadius: '3px', color: PURPLE, fontWeight: '600' }}>{badge}</span>
+                                  {doc.url ? (
+                                    <a href={doc.url} target="_blank" rel="noreferrer" style={{ fontSize: '11px', color: PURPLE, textDecoration: 'none' }}>{doc.name}</a>
+                                  ) : (
+                                    <span style={{ fontSize: '11px', color: T.text }}>{doc.name}</span>
+                                  )}
+                                </div>
+                              );
+                            })
                           )}
                         </div>
                       </div>
