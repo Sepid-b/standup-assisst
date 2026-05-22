@@ -156,7 +156,7 @@ function NavButton({ label, onClick, T }) {
   );
 }
 
-export default function HistoryView({ T, dark }) {
+export default function HistoryView({ T, dark, currentData }) {
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
   const [mode, setMode] = useState('daily');
@@ -382,23 +382,41 @@ export default function HistoryView({ T, dark }) {
 
           {/* Day rows */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            {weekDays.map(({ date, dayName, snap }) => {
+            {/* weekDays is newest-first; find the most recent date that has a snapshot */}
+            {(() => {
+              const mostRecentSnapDate = weekDays.find(d => d.snap)?.date || null;
+              return weekDays.map(({ date, dayName, snap }) => {
               const isExpanded   = expandedDays[date];
               const isTodayDate  = isToday(date);
               const borderColor  = getDayBorderColor(snap);
               const statusLabel  = snap ? (STATUS_LABELS[snap.status] || snap.statusCustom || 'In progress') : null;
               const statusColor  = snap ? (STATUS_COLORS[snap.status] || PURPLE) : GRAY;
 
+              // Docs from snapshot + current-state docs missing from snapshot.
+              // Docs with no addedAt are shown on the most recent active day (fallback for
+              // docs added before addedAt tracking was in place).
+              const snapshotDocs = Array.isArray(snap?.handoverDocs) ? snap.handoverDocs : [];
+              const snapshotDocNames = new Set(snapshotDocs.map(d => d.name));
+              const supplementalDocs = (currentData?.handoverDocs || [])
+                .filter(d => !snapshotDocNames.has(d.name) && (
+                  d.addedAt === date ||
+                  (!d.addedAt && date === mostRecentSnapDate)
+                ));
+              const allDocs = [...snapshotDocs, ...supplementalDocs];
+
+              // Day is expandable if it has a snapshot OR has docs from current state
+              const hasContent = !!(snap || supplementalDocs.length > 0);
+
               return (
                 <div key={date}>
                   <div
-                    onClick={() => snap && toggleDay(date)}
+                    onClick={() => hasContent && toggleDay(date)}
                     style={{
                       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                       padding: '12px 14px', background: T.card,
                       border: `0.5px solid ${T.border}`, borderLeft: `3px solid ${borderColor}`,
                       borderRadius: isExpanded ? '6px 6px 0 0' : '6px',
-                      cursor: snap ? 'pointer' : 'default', opacity: snap ? 1 : 0.5
+                      cursor: hasContent ? 'pointer' : 'default', opacity: hasContent ? 1 : 0.5
                     }}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -423,20 +441,25 @@ export default function HistoryView({ T, dark }) {
                           )}
                           <span style={{ fontSize: '11px', color: T.muted }}>{isExpanded ? '▲' : '▼'}</span>
                         </>
+                      ) : supplementalDocs.length > 0 ? (
+                        <>
+                          <span style={{ fontSize: '11px', color: DPURP }}>{supplementalDocs.length} link{supplementalDocs.length > 1 ? 's' : ''}</span>
+                          <span style={{ fontSize: '11px', color: T.muted }}>{isExpanded ? '▲' : '▼'}</span>
+                        </>
                       ) : (
                         <span style={{ fontSize: '11px', color: T.muted, fontStyle: 'italic' }}>No standup recorded</span>
                       )}
                     </div>
                   </div>
 
-                  {isExpanded && snap && (() => {
+                  {isExpanded && hasContent && (() => {
                     const seenP = new Set();
-                    const uniqueProjects = (snap.currentProjects || []).filter(p => { if (seenP.has(p.name)) return false; seenP.add(p.name); return true; });
+                    const uniqueProjects = (snap?.currentProjects || []).filter(p => { if (seenP.has(p.name)) return false; seenP.add(p.name); return true; });
                     const seenT = new Set();
-                    const uniqueTasks = (snap.completedTasks || []).filter(t => { if (seenT.has(t.name)) return false; seenT.add(t.name); return true; });
+                    const uniqueTasks = (snap?.completedTasks || []).filter(t => { if (seenT.has(t.name)) return false; seenT.add(t.name); return true; });
                     const seenB = new Set();
-                    const uniqueBlockers = (snap.blockers || []).filter(b => { if (seenB.has(b.text)) return false; seenB.add(b.text); return true; });
-                    const docs = Array.isArray(snap.handoverDocs) ? snap.handoverDocs : [];
+                    const uniqueBlockers = (snap?.blockers || []).filter(b => { if (seenB.has(b.text)) return false; seenB.add(b.text); return true; });
+                    const docs = allDocs;
                     return (
                       <div style={{
                         padding: '16px', background: T.card,
@@ -480,7 +503,7 @@ export default function HistoryView({ T, dark }) {
                               {b.text}
                             </div>
                           ))}
-                          {snap.note && (
+                          {snap?.note && (
                             <>
                               <div style={{ fontSize: '10px', color: PURPLE, textTransform: 'uppercase', letterSpacing: '0.05em', marginTop: '16px', marginBottom: '8px' }}>Note to Maria</div>
                               <div style={{ fontSize: '11px', color: T.muted, fontStyle: 'italic' }}>"{snap.note}"</div>
@@ -509,7 +532,8 @@ export default function HistoryView({ T, dark }) {
                   })()}
                 </div>
               );
-            })}
+            });
+            })()}
           </div>
         </>
       )}
@@ -574,9 +598,9 @@ export default function HistoryView({ T, dark }) {
         const stats = getMonthStats();
         const maxWeekNwg = Math.max(...stats.weeklyNwg.map(w => w.nwg), 16);
         return (
-          <div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', alignItems: 'start' }}>
             {/* NWG chart by week */}
-            <div style={{ background: T.card, borderRadius: '8px', padding: '16px', border: `0.5px solid ${T.border}`, marginBottom: '16px' }}>
+            <div style={{ background: T.card, borderRadius: '8px', padding: '16px', border: `0.5px solid ${T.border}` }}>
               <div style={{ fontSize: '10px', color: PURPLE, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '16px' }}>
                 NWG Hours — {formatMonthYear(currentMonth)}
               </div>

@@ -165,7 +165,7 @@ export default function App() {
         {loading ? (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '200px', color: T.muted, fontSize: '13px' }}>Loading...</div>
         ) : view === 'history' ? (
-          <HistoryView T={T} dark={dark} />
+          <HistoryView T={T} dark={dark} currentData={data} />
         ) : data ? (
           view === 'mentor'
             ? <MentorView data={data} onRefresh={refresh} T={T} dark={dark} />

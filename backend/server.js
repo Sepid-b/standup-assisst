@@ -231,14 +231,54 @@ app.put('/api/note', async (req, res) => {
 app.post('/api/docs', async (req, res) => {
   try {
     const data = await loadData();
-    const doc = { id: Date.now().toString(), addedAt: getToday(), ...req.body };
+    const today = getToday();
+    const doc = { id: Date.now().toString(), addedAt: today, ...req.body };
     data.handoverDocs.push(doc);
-    res.json(forClient(await saveData(data)));
+    const saved = await saveData(data);
+
+    // Immediately sync this doc to today's snapshot so history is never missing it
+    syncDocToSnapshot(saved, today).catch(err => console.error('Doc snapshot sync failed:', err));
+
+    res.json(forClient(saved));
   } catch (err) {
     console.error('POST /api/docs error:', err);
     res.status(500).json({ error: err.message });
   }
 });
+
+// Sync all handover docs for a given date into the snapshot for that date
+async function syncDocToSnapshot(state, dateStr) {
+  const weekStart = getWeekStart(new Date(dateStr));
+  const { data: existing } = await supabase
+    .from('standup_snapshots')
+    .select('id')
+    .eq('date', dateStr)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  let snapshotId;
+  if (existing) {
+    snapshotId = existing.id;
+  } else {
+    const { data: created, error } = await supabase
+      .from('standup_snapshots')
+      .insert({ date: dateStr, week_start: weekStart, status: state.status, nwg_hours: state.nwgHours || 0, nwg_target: state.nwgTarget || 16, note: state.note || null })
+      .select()
+      .single();
+    if (error) throw error;
+    snapshotId = created.id;
+  }
+
+  // Delete and re-insert only handover_doc items for this snapshot
+  await supabase.from('standup_items').delete().eq('snapshot_id', snapshotId).eq('type', 'handover_doc');
+  const docItems = (state.handoverDocs || [])
+    .filter(d => d.addedAt === dateStr)
+    .map(d => ({ snapshot_id: snapshotId, type: 'handover_doc', name: d.name, meta: d.meta || null, item_note: d.url || null }));
+  if (docItems.length > 0) {
+    await supabase.from('standup_items').insert(docItems);
+  }
+}
 
 // DELETE handover doc
 app.delete('/api/docs/:id', async (req, res) => {
