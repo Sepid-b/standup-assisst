@@ -1,5 +1,10 @@
 import { useState, useEffect, useRef } from 'react'
-import { updateTask, createTask, deleteTask, fetchComments, createComment } from '../api'
+import {
+  updateTask, createTask, deleteTask, fetchComments, createComment,
+  fetchAllTags, createTag, fetchTaskTags, addTagToTask, removeTagFromTask,
+  fetchTaskDocs, addDoc, deleteDoc,
+  fetchTaskAttachments, uploadAttachment, deleteAttachment
+} from '../api'
 
 const STATUSES = [
   { id: 'todo', label: 'To Do' },
@@ -155,9 +160,39 @@ function TaskCard({ task, T, onClick, onDragStart, onDragOver, onDrop, dropIndic
           {task.project.name}
         </div>
       )}
-      <div style={{ fontSize: 11, color: T.text, lineHeight: 1.4, marginBottom: 6 }}>
+      <div style={{ fontSize: 11, color: T.text, lineHeight: 1.4, marginBottom: 4 }}>
         {task.title}
       </div>
+      {/* Tags */}
+      {task.tags && task.tags.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 6 }}>
+          {task.tags.slice(0, 3).map(tag => (
+            <span
+              key={tag.id}
+              style={{
+                padding: '2px 6px',
+                borderRadius: 10,
+                fontSize: 9,
+                background: `${tag.color}25`,
+                color: tag.color
+              }}
+            >
+              {tag.name}
+            </span>
+          ))}
+          {task.tags.length > 3 && (
+            <span style={{
+              padding: '2px 6px',
+              borderRadius: 10,
+              fontSize: 9,
+              background: T.bg3,
+              color: T.text3
+            }}>
+              +{task.tags.length - 3}
+            </span>
+          )}
+        </div>
+      )}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <div style={{
           width: 5,
@@ -175,6 +210,13 @@ function TaskCard({ task, T, onClick, onDragStart, onDragOver, onDrop, dropIndic
           <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
             <i className="ti ti-message" style={{ fontSize: 10, color: T.text3 }} />
             <span style={{ fontSize: 9, color: T.text3 }}>{task.comment_count}</span>
+          </div>
+        )}
+        {/* Docs/links indicator */}
+        {task.docs_count > 0 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+            <i className="ti ti-link" style={{ fontSize: 10, color: T.text3 }} />
+            <span style={{ fontSize: 9, color: T.text3 }}>{task.docs_count}</span>
           </div>
         )}
         <div style={{ flex: 1 }} />
@@ -510,7 +552,9 @@ function MentionInput({ value, onChange, onSubmit, placeholder, T, members }) {
 // Custom dropdown for modal fields
 function ModalDropdown({ value, options, onChange, T, renderValue, renderOption }) {
   const [open, setOpen] = useState(false)
+  const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0, width: 0 })
   const ref = useRef()
+  const triggerRef = useRef()
 
   useEffect(() => {
     const handleClick = (e) => {
@@ -520,12 +564,25 @@ function ModalDropdown({ value, options, onChange, T, renderValue, renderOption 
     return () => document.removeEventListener('mousedown', handleClick)
   }, [])
 
+  const handleOpen = () => {
+    if (triggerRef.current) {
+      const rect = triggerRef.current.getBoundingClientRect()
+      setMenuPosition({
+        top: rect.bottom + 4,
+        left: rect.left,
+        width: rect.width
+      })
+    }
+    setOpen(!open)
+  }
+
   const selected = options.find(o => o.id === value)
 
   return (
     <div ref={ref} style={{ position: 'relative' }}>
       <div
-        onClick={() => setOpen(!open)}
+        ref={triggerRef}
+        onClick={handleOpen}
         style={{
           display: 'flex',
           alignItems: 'center',
@@ -543,16 +600,15 @@ function ModalDropdown({ value, options, onChange, T, renderValue, renderOption 
       </div>
       {open && (
         <div style={{
-          position: 'absolute',
-          top: '100%',
-          left: 0,
-          right: 0,
-          marginTop: 4,
+          position: 'fixed',
+          top: menuPosition.top,
+          left: menuPosition.left,
+          width: menuPosition.width,
           background: T.bg2,
           border: `1px solid ${T.border}`,
           borderRadius: 6,
           padding: 4,
-          zIndex: 200,
+          zIndex: 300,
           boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
           maxHeight: 200,
           overflowY: 'auto'
@@ -579,8 +635,239 @@ function ModalDropdown({ value, options, onChange, T, renderValue, renderOption 
   )
 }
 
+// Helper to format file size
+function formatFileSize(bytes) {
+  if (!bytes) return ''
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+// Helper to get icon for doc URL
+function getDocIcon(url) {
+  if (url?.includes('figma.com')) return { icon: 'ti-brand-figma', color: '#a259ff' }
+  if (url?.includes('docs.google.com')) return { icon: 'ti-file-text', color: '#4285f4' }
+  return { icon: 'ti-link', color: '#2ecc71' }
+}
+
+// Helper to get icon for attachment mime type
+function getAttachmentIcon(mimeType) {
+  if (mimeType?.startsWith('image/')) return { icon: 'ti-photo', color: '#2ecc71' }
+  if (mimeType === 'application/pdf') return { icon: 'ti-file-type-pdf', color: '#e74c3c' }
+  return { icon: 'ti-file', color: '#71717a' }
+}
+
+// Color options for tag picker
+const TAG_COLOR_OPTIONS = [
+  '#a259ff', '#f0b95a', '#e74c3c', '#2ecc71', '#5dade2',
+  '#7c6bf0', '#e84393', '#f39c12', '#1abc9c', '#9b59b6'
+]
+
+// Tag picker component
+function TagPicker({ taskTags, allTags, onAdd, onRemove, onCreate, T }) {
+  const [open, setOpen] = useState(false)
+  const [search, setSearch] = useState('')
+  const [selectedColor, setSelectedColor] = useState(TAG_COLOR_OPTIONS[0])
+  const [showCreateForm, setShowCreateForm] = useState(false)
+  const ref = useRef()
+
+  useEffect(() => {
+    const handleClick = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [])
+
+  const filteredTags = allTags.filter(t => t.name.toLowerCase().includes(search.toLowerCase()))
+  const taskTagIds = taskTags.map(t => t.id)
+  const canCreate = search && !allTags.some(t => t.name.toLowerCase() === search.toLowerCase())
+
+  const handleTagClick = (tag) => {
+    if (taskTagIds.includes(tag.id)) {
+      onRemove(tag.id)
+    } else {
+      onAdd(tag.id)
+    }
+  }
+
+  const handleCreate = async () => {
+    if (!search.trim()) return
+    await onCreate(search.trim(), selectedColor)
+    setSearch('')
+    setShowCreateForm(false)
+    setSelectedColor(TAG_COLOR_OPTIONS[0])
+  }
+
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <button
+        onClick={() => setOpen(!open)}
+        style={{
+          padding: '3px 9px',
+          borderRadius: 20,
+          fontSize: 10,
+          border: `1px dashed ${T.border}`,
+          color: T.text3,
+          background: 'none',
+          cursor: 'pointer',
+          transition: 'border-color 0.2s, color 0.2s'
+        }}
+        onMouseEnter={e => { e.currentTarget.style.borderColor = T.purple; e.currentTarget.style.color = T.purple }}
+        onMouseLeave={e => { e.currentTarget.style.borderColor = T.border; e.currentTarget.style.color = T.text3 }}
+      >
+        + Add tag
+      </button>
+      {open && (
+        <div style={{
+          position: 'absolute',
+          top: '100%',
+          left: 0,
+          marginTop: 6,
+          background: T.bg2,
+          border: `0.5px solid ${T.border}`,
+          borderRadius: 8,
+          padding: 6,
+          minWidth: 200,
+          zIndex: 20,
+          boxShadow: '0 4px 16px rgba(0,0,0,0.3)'
+        }}>
+          <input
+            value={search}
+            onChange={e => { setSearch(e.target.value); setShowCreateForm(false) }}
+            placeholder="Search or create tag..."
+            autoFocus
+            style={{
+              width: '100%',
+              padding: '6px 8px',
+              background: '#18181b',
+              border: `0.5px solid ${T.border}`,
+              borderRadius: 5,
+              color: T.text,
+              fontSize: 11,
+              marginBottom: 6,
+              outline: 'none'
+            }}
+          />
+          <div style={{ maxHeight: 150, overflowY: 'auto' }}>
+            {filteredTags.map(tag => (
+              <div
+                key={tag.id}
+                onClick={() => handleTagClick(tag)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '5px 8px',
+                  borderRadius: 4,
+                  cursor: 'pointer'
+                }}
+                onMouseEnter={e => e.currentTarget.style.background = T.bg3}
+                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+              >
+                <input
+                  type="checkbox"
+                  checked={taskTagIds.includes(tag.id)}
+                  readOnly
+                  style={{ accentColor: T.purple }}
+                />
+                <div style={{ width: 10, height: 10, borderRadius: '50%', background: tag.color }} />
+                <span style={{ fontSize: 11, color: T.text }}>{tag.name}</span>
+              </div>
+            ))}
+            {filteredTags.length === 0 && !canCreate && (
+              <div style={{ padding: '8px', color: T.text3, fontSize: 11, textAlign: 'center' }}>
+                No tags yet
+              </div>
+            )}
+          </div>
+          {canCreate && (
+            <>
+              <div style={{ height: 1, background: T.border, margin: '6px 0' }} />
+              {!showCreateForm ? (
+                <div
+                  onClick={() => setShowCreateForm(true)}
+                  style={{
+                    padding: '5px 8px',
+                    borderRadius: 4,
+                    cursor: 'pointer',
+                    color: T.purple,
+                    fontSize: 11,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.background = T.bg3}
+                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                >
+                  <div style={{ width: 10, height: 10, borderRadius: '50%', background: selectedColor }} />
+                  + Create "{search}"
+                </div>
+              ) : (
+                <div style={{ padding: '6px 0' }}>
+                  <div style={{ fontSize: 10, color: T.text3, marginBottom: 6 }}>Pick a color:</div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+                    {TAG_COLOR_OPTIONS.map(color => (
+                      <div
+                        key={color}
+                        onClick={() => setSelectedColor(color)}
+                        style={{
+                          width: 20,
+                          height: 20,
+                          borderRadius: '50%',
+                          background: color,
+                          cursor: 'pointer',
+                          border: selectedColor === color ? '2px solid #fff' : '2px solid transparent',
+                          boxShadow: selectedColor === color ? '0 0 0 1px ' + color : 'none'
+                        }}
+                      />
+                    ))}
+                  </div>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <button
+                      onClick={handleCreate}
+                      style={{
+                        flex: 1,
+                        padding: '5px 10px',
+                        background: selectedColor,
+                        border: 'none',
+                        borderRadius: 4,
+                        color: '#fff',
+                        fontSize: 10,
+                        cursor: 'pointer',
+                        fontWeight: 500
+                      }}
+                    >
+                      Create "{search}"
+                    </button>
+                    <button
+                      onClick={() => setShowCreateForm(false)}
+                      style={{
+                        padding: '5px 10px',
+                        background: 'transparent',
+                        border: `1px solid ${T.border}`,
+                        borderRadius: 4,
+                        color: T.text3,
+                        fontSize: 10,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // Redesigned TaskModal with full features
 function TaskModal({ task, T, members, projects, currentMember, onClose, onUpdate, onDelete }) {
+  // Core task state
   const [title, setTitle] = useState(task.title)
   const [editedTitle, setEditedTitle] = useState(task.title)
   const [description, setDescription] = useState(task.description || '')
@@ -592,23 +879,41 @@ function TaskModal({ task, T, members, projects, currentMember, onClose, onUpdat
   const [editingTitle, setEditingTitle] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+
+  // Tags state
+  const [taskTags, setTaskTags] = useState([])
+  const [allTags, setAllTags] = useState([])
+
+  // Docs state
+  const [docs, setDocs] = useState([])
+  const [showAddLink, setShowAddLink] = useState(false)
+  const [newDocTitle, setNewDocTitle] = useState('')
+  const [newDocUrl, setNewDocUrl] = useState('')
+
+  // Attachments state
+  const [attachments, setAttachments] = useState([])
+  const [showUpload, setShowUpload] = useState(false)
+  const [uploading, setUploading] = useState(false)
+
+  // Comments state
   const [comments, setComments] = useState([])
   const [newComment, setNewComment] = useState('')
   const [sendingComment, setSendingComment] = useState(false)
 
   const dateInputRef = useRef()
+  const fileInputRef = useRef()
   const project = projects.find(p => p.id === projectId)
-  const assignee = members.find(m => m.id === assigneeId)
 
-  // Load comments on mount
+  // Load all data on mount
   useEffect(() => {
-    loadComments()
+    Promise.all([
+      fetchTaskTags(task.id).then(setTaskTags),
+      fetchAllTags().then(setAllTags),
+      fetchTaskDocs(task.id).then(setDocs),
+      fetchTaskAttachments(task.id).then(setAttachments),
+      fetchComments(task.id).then(setComments)
+    ])
   }, [task.id])
-
-  const loadComments = async () => {
-    const data = await fetchComments(task.id)
-    setComments(data)
-  }
 
   const handleOverlayClick = (e) => {
     if (e.target === e.currentTarget) onClose()
@@ -636,7 +941,7 @@ function TaskModal({ task, T, members, projects, currentMember, onClose, onUpdat
       due_date: dueDate || null
     }
     const updated = await updateTask(task.id, updates)
-    onUpdate(updated)
+    onUpdate({ ...updated, tags: taskTags })
     setIsSaving(false)
     onClose()
   }
@@ -647,16 +952,64 @@ function TaskModal({ task, T, members, projects, currentMember, onClose, onUpdat
     onClose()
   }
 
+  // Tag handlers
+  const handleAddTag = async (tagId) => {
+    const tag = await addTagToTask(task.id, tagId)
+    setTaskTags(prev => [...prev, tag])
+  }
+
+  const handleRemoveTag = async (tagId) => {
+    await removeTagFromTask(task.id, tagId)
+    setTaskTags(prev => prev.filter(t => t.id !== tagId))
+  }
+
+  const handleCreateTag = async (name, color) => {
+    const tag = await createTag(name, currentMember?.id, color)
+    setAllTags(prev => [...prev, tag])
+    await handleAddTag(tag.id)
+  }
+
+  // Doc handlers
+  const handleAddDoc = async () => {
+    if (!newDocTitle.trim() || !newDocUrl.trim()) return
+    const doc = await addDoc(task.id, newDocTitle.trim(), newDocUrl.trim(), currentMember?.id)
+    setDocs(prev => [...prev, doc])
+    setNewDocTitle('')
+    setNewDocUrl('')
+    setShowAddLink(false)
+  }
+
+  const handleDeleteDoc = async (docId) => {
+    await deleteDoc(docId)
+    setDocs(prev => prev.filter(d => d.id !== docId))
+  }
+
+  // Attachment handlers
+  const handleFileSelect = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploading(true)
+    const attachment = await uploadAttachment(task.id, file, currentMember?.id)
+    setAttachments(prev => [...prev, attachment])
+    setUploading(false)
+    setShowUpload(false)
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }
+
+  const handleDeleteAttachment = async (attachmentId) => {
+    await deleteAttachment(attachmentId)
+    setAttachments(prev => prev.filter(a => a.id !== attachmentId))
+  }
+
+  // Comment handlers
   const handleSendComment = async () => {
     if (!newComment.trim() || !currentMember) return
     setSendingComment(true)
     const comment = await createComment(task.id, currentMember.id, newComment.trim())
-    const newComments = [...comments, comment]
-    setComments(newComments)
+    setComments(prev => [...prev, comment])
     setNewComment('')
     setSendingComment(false)
-    // Update task's comment count in parent
-    onUpdate({ ...task, comment_count: newComments.length })
+    onUpdate({ ...task, comment_count: comments.length + 1 })
   }
 
   const formatDate = (dateStr) => {
@@ -680,7 +1033,7 @@ function TaskModal({ task, T, members, projects, currentMember, onClose, onUpdat
       style={{
         position: 'fixed',
         inset: 0,
-        background: 'rgba(0,0,0,0.5)',
+        background: 'rgba(0,0,0,0.55)',
         zIndex: 100,
         display: 'flex',
         alignItems: 'center',
@@ -688,20 +1041,19 @@ function TaskModal({ task, T, members, projects, currentMember, onClose, onUpdat
       }}
     >
       <div style={{
-        width: 620,
-        maxHeight: '85vh',
-        background: T.bg2,
+        width: 640,
+        maxHeight: '88vh',
+        background: '#232326',
         borderRadius: 10,
         border: `0.5px solid ${T.border}`,
         overflow: 'hidden',
         display: 'flex',
-        flexDirection: 'column',
-        boxShadow: '0 8px 32px rgba(0,0,0,0.4)'
+        flexDirection: 'column'
       }}>
         {/* Modal Header */}
         <div style={{
-          padding: '20px 24px 16px',
-          borderBottom: `1px solid ${T.border}`,
+          padding: '18px 24px 16px',
+          borderBottom: `0.5px solid ${T.border}`,
           borderLeft: `4px solid ${project?.color || T.text3}`,
           display: 'flex',
           justifyContent: 'space-between',
@@ -711,7 +1063,7 @@ function TaskModal({ task, T, members, projects, currentMember, onClose, onUpdat
             {/* Project line */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
               <div style={{ width: 8, height: 8, borderRadius: 2, background: project?.color || T.text3 }} />
-              <span style={{ fontSize: 11, color: T.text3 }}>{project?.name || 'No project'}</span>
+              <span style={{ fontSize: 11, color: '#71717a' }}>{project?.name || 'No project'}</span>
             </div>
             {/* Title */}
             {editingTitle ? (
@@ -727,11 +1079,11 @@ function TaskModal({ task, T, members, projects, currentMember, onClose, onUpdat
                   style={{
                     flex: 1,
                     padding: '4px 8px',
-                    background: T.bg3,
-                    border: `1px solid ${T.border}`,
+                    background: '#2e2e32',
+                    border: `0.5px solid ${T.border}`,
                     borderRadius: 5,
-                    color: T.text,
-                    fontSize: 20,
+                    color: '#f4f4f5',
+                    fontSize: 18,
                     fontWeight: 500,
                     outline: 'none'
                   }}
@@ -775,9 +1127,9 @@ function TaskModal({ task, T, members, projects, currentMember, onClose, onUpdat
               <h2
                 onClick={() => setEditingTitle(true)}
                 style={{
-                  fontSize: 20,
+                  fontSize: 18,
                   fontWeight: 500,
-                  color: T.text,
+                  color: '#f4f4f5',
                   cursor: 'pointer',
                   margin: 0
                 }}
@@ -803,44 +1155,252 @@ function TaskModal({ task, T, members, projects, currentMember, onClose, onUpdat
 
         {/* Modal Body */}
         <div style={{
+          display: 'grid',
+          gridTemplateColumns: '1fr 210px',
+          gap: 24,
           padding: '20px 24px',
           overflowY: 'auto',
           flex: 1
         }}>
-          {/* Two-column grid */}
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: '1fr 220px',
-            gap: 24
-          }}>
-            {/* Left column: Description + Comments */}
-            <div>
-              <label style={{ fontSize: 11, color: T.text3, textTransform: 'uppercase', letterSpacing: 0.5, display: 'block', marginBottom: 6 }}>
-                Description
-              </label>
-              <textarea
-                value={description}
-                onChange={e => setDescription(e.target.value)}
-                placeholder="Add a description..."
-                style={{
-                  width: '100%',
-                  minHeight: 100,
-                  padding: 10,
-                  background: T.bg3,
-                  border: `1px solid ${T.border}`,
-                  borderRadius: 6,
-                  color: T.text,
-                  fontSize: 12,
-                  fontFamily: 'inherit',
-                  resize: 'vertical',
-                  outline: 'none'
-                }}
-              />
+          {/* LEFT COLUMN */}
+          <div>
+            {/* Description */}
+            <label style={{ fontSize: 9, color: '#71717a', textTransform: 'uppercase', letterSpacing: 0.5, display: 'block', marginBottom: 6 }}>
+              Description
+            </label>
+            <textarea
+              value={description}
+              onChange={e => setDescription(e.target.value)}
+              placeholder="Add a description..."
+              style={{
+                width: '100%',
+                minHeight: 80,
+                padding: 10,
+                background: '#2e2e32',
+                border: `0.5px solid ${T.border}`,
+                borderRadius: 6,
+                color: '#f4f4f5',
+                fontSize: 11,
+                fontFamily: 'inherit',
+                resize: 'vertical',
+                outline: 'none'
+              }}
+            />
 
-              {/* Comments section */}
-              <label style={{ fontSize: 11, color: T.text3, textTransform: 'uppercase', letterSpacing: 0.5, display: 'block', marginTop: 20, marginBottom: 10 }}>
-                Comments
-              </label>
+            {/* Docs, links & files */}
+            <label style={{ fontSize: 9, color: '#71717a', textTransform: 'uppercase', letterSpacing: 0.5, display: 'block', marginTop: 16, marginBottom: 8 }}>
+              Docs, links & files
+            </label>
+
+            {/* Docs list */}
+            {docs.map(doc => {
+              const iconInfo = getDocIcon(doc.url)
+              return (
+                <div
+                  key={doc.id}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    padding: '7px 10px',
+                    background: '#2e2e32',
+                    border: `0.5px solid ${T.border}`,
+                    borderRadius: 6,
+                    marginBottom: 5,
+                    position: 'relative'
+                  }}
+                  className="doc-item"
+                >
+                  <div style={{
+                    width: 26,
+                    height: 26,
+                    borderRadius: 5,
+                    background: `${iconInfo.color}20`,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}>
+                    <i className={`ti ${iconInfo.icon}`} style={{ fontSize: 14, color: iconInfo.color }} />
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 11, color: '#f4f4f5', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{doc.title}</div>
+                    <div style={{ fontSize: 9, color: '#71717a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{doc.url}</div>
+                  </div>
+                  <a href={doc.url} target="_blank" rel="noopener noreferrer" style={{ color: '#71717a', padding: 4 }}>
+                    <i className="ti ti-external-link" style={{ fontSize: 14 }} />
+                  </a>
+                  <button onClick={() => handleDeleteDoc(doc.id)} style={{ background: 'none', border: 'none', color: '#71717a', padding: 4, cursor: 'pointer' }}>
+                    <i className="ti ti-trash" style={{ fontSize: 14 }} />
+                  </button>
+                </div>
+              )
+            })}
+
+            {/* Attachments list */}
+            {attachments.map(att => {
+              const iconInfo = getAttachmentIcon(att.mime_type)
+              return (
+                <div
+                  key={att.id}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    padding: '7px 10px',
+                    background: '#2e2e32',
+                    border: `0.5px solid ${T.border}`,
+                    borderRadius: 6,
+                    marginBottom: 5
+                  }}
+                >
+                  <div style={{
+                    width: 26,
+                    height: 26,
+                    borderRadius: 5,
+                    background: `${iconInfo.color}20`,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}>
+                    <i className={`ti ${iconInfo.icon}`} style={{ fontSize: 14, color: iconInfo.color }} />
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 11, color: '#f4f4f5', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{att.name}</div>
+                    <div style={{ fontSize: 9, color: '#71717a' }}>
+                      {formatFileSize(att.size_bytes)} {att.uploader?.name ? `• uploaded by ${att.uploader.name}` : ''}
+                    </div>
+                  </div>
+                  <a href={att.url} target="_blank" rel="noopener noreferrer" style={{ color: '#71717a', padding: 4 }}>
+                    <i className="ti ti-download" style={{ fontSize: 14 }} />
+                  </a>
+                  <button onClick={() => handleDeleteAttachment(att.id)} style={{ background: 'none', border: 'none', color: '#71717a', padding: 4, cursor: 'pointer' }}>
+                    <i className="ti ti-trash" style={{ fontSize: 14 }} />
+                  </button>
+                </div>
+              )
+            })}
+
+            {/* Action buttons */}
+            <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+              <button
+                onClick={() => { setShowAddLink(true); setShowUpload(false) }}
+                style={{
+                  flex: 1,
+                  border: `1px dashed ${T.border}`,
+                  borderRadius: 6,
+                  padding: '6px 10px',
+                  fontSize: 11,
+                  color: '#71717a',
+                  background: 'none',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 6
+                }}
+              >
+                <i className="ti ti-link" style={{ fontSize: 14 }} />
+                Add link
+              </button>
+              <button
+                onClick={() => { setShowUpload(true); setShowAddLink(false) }}
+                style={{
+                  flex: 1,
+                  border: `1px dashed ${T.border}`,
+                  borderRadius: 6,
+                  padding: '6px 10px',
+                  fontSize: 11,
+                  color: '#71717a',
+                  background: 'none',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 6
+                }}
+              >
+                <i className="ti ti-paperclip" style={{ fontSize: 14 }} />
+                Attach file
+              </button>
+            </div>
+
+            {/* Add link form */}
+            {showAddLink && (
+              <div style={{ marginTop: 8, padding: 10, background: '#2e2e32', borderRadius: 6, border: `0.5px solid ${T.border}` }}>
+                <input
+                  value={newDocTitle}
+                  onChange={e => setNewDocTitle(e.target.value)}
+                  placeholder="Title"
+                  style={{
+                    width: '100%',
+                    padding: '6px 8px',
+                    marginBottom: 6,
+                    background: '#18181b',
+                    border: `0.5px solid ${T.border}`,
+                    borderRadius: 4,
+                    color: '#f4f4f5',
+                    fontSize: 11,
+                    outline: 'none'
+                  }}
+                />
+                <input
+                  value={newDocUrl}
+                  onChange={e => setNewDocUrl(e.target.value)}
+                  placeholder="URL"
+                  style={{
+                    width: '100%',
+                    padding: '6px 8px',
+                    marginBottom: 8,
+                    background: '#18181b',
+                    border: `0.5px solid ${T.border}`,
+                    borderRadius: 4,
+                    color: '#f4f4f5',
+                    fontSize: 11,
+                    outline: 'none'
+                  }}
+                />
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button onClick={handleAddDoc} style={{ padding: '5px 12px', background: T.purple, border: 'none', borderRadius: 4, color: '#fff', fontSize: 10, cursor: 'pointer' }}>Save</button>
+                  <button onClick={() => { setShowAddLink(false); setNewDocTitle(''); setNewDocUrl('') }} style={{ padding: '5px 12px', background: 'transparent', border: `1px solid ${T.border}`, borderRadius: 4, color: '#71717a', fontSize: 10, cursor: 'pointer' }}>Cancel</button>
+                </div>
+              </div>
+            )}
+
+            {/* Upload zone */}
+            {showUpload && (
+              <div
+                onClick={() => fileInputRef.current?.click()}
+                style={{
+                  marginTop: 8,
+                  padding: 20,
+                  background: '#2e2e32',
+                  borderRadius: 6,
+                  border: `1px dashed ${T.border}`,
+                  textAlign: 'center',
+                  cursor: 'pointer'
+                }}
+              >
+                {uploading ? (
+                  <div style={{ color: '#71717a', fontSize: 11 }}>Uploading...</div>
+                ) : (
+                  <>
+                    <i className="ti ti-cloud-upload" style={{ fontSize: 24, color: '#71717a', marginBottom: 6 }} />
+                    <div style={{ color: '#71717a', fontSize: 11 }}>Drop files here or browse</div>
+                  </>
+                )}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  onChange={handleFileSelect}
+                  style={{ display: 'none' }}
+                />
+              </div>
+            )}
+
+            {/* Comments section */}
+            <label style={{ fontSize: 9, color: '#71717a', textTransform: 'uppercase', letterSpacing: 0.5, display: 'block', marginTop: 20, marginBottom: 10 }}>
+              Comments
+            </label>
 
               {/* Comment list */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 12 }}>
@@ -918,11 +1478,61 @@ function TaskModal({ task, T, members, projects, currentMember, onClose, onUpdat
               </div>
             </div>
 
-            {/* Right column: Metadata fields */}
+            {/* RIGHT COLUMN */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {/* Tags */}
+              <div>
+                <label style={{ fontSize: 9, color: '#71717a', textTransform: 'uppercase', letterSpacing: 0.5, display: 'block', marginBottom: 4 }}>Tags</label>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+                  {taskTags.map(tag => (
+                    <div
+                      key={tag.id}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 4,
+                        padding: '3px 9px',
+                        borderRadius: 20,
+                        fontSize: 10,
+                        fontWeight: 500,
+                        background: `${tag.color}25`,
+                        color: tag.color,
+                        position: 'relative'
+                      }}
+                      className="tag-pill"
+                    >
+                      {tag.name}
+                      <button
+                        onClick={() => handleRemoveTag(tag.id)}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: tag.color,
+                          cursor: 'pointer',
+                          padding: 0,
+                          fontSize: 10,
+                          lineHeight: 1,
+                          marginLeft: 2
+                        }}
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                  <TagPicker
+                    taskTags={taskTags}
+                    allTags={allTags}
+                    onAdd={handleAddTag}
+                    onRemove={handleRemoveTag}
+                    onCreate={handleCreateTag}
+                    T={T}
+                  />
+                </div>
+              </div>
+
               {/* Status */}
               <div>
-                <label style={{ fontSize: 10, color: T.text3, textTransform: 'uppercase', letterSpacing: 0.5, display: 'block', marginBottom: 4 }}>Status</label>
+                <label style={{ fontSize: 9, color: '#71717a', textTransform: 'uppercase', letterSpacing: 0.5, display: 'block', marginBottom: 4 }}>Status</label>
                 <ModalDropdown
                   value={status}
                   options={statusOptions}
@@ -945,7 +1555,7 @@ function TaskModal({ task, T, members, projects, currentMember, onClose, onUpdat
 
               {/* Assignee */}
               <div>
-                <label style={{ fontSize: 10, color: T.text3, textTransform: 'uppercase', letterSpacing: 0.5, display: 'block', marginBottom: 4 }}>Assignee</label>
+                <label style={{ fontSize: 9, color: '#71717a', textTransform: 'uppercase', letterSpacing: 0.5, display: 'block', marginBottom: 4 }}>Assignee</label>
                 <ModalDropdown
                   value={assigneeId}
                   options={assigneeOptions}
@@ -994,7 +1604,7 @@ function TaskModal({ task, T, members, projects, currentMember, onClose, onUpdat
 
               {/* Priority */}
               <div>
-                <label style={{ fontSize: 10, color: T.text3, textTransform: 'uppercase', letterSpacing: 0.5, display: 'block', marginBottom: 4 }}>Priority</label>
+                <label style={{ fontSize: 9, color: '#71717a', textTransform: 'uppercase', letterSpacing: 0.5, display: 'block', marginBottom: 4 }}>Priority</label>
                 <ModalDropdown
                   value={priority}
                   options={PRIORITIES}
@@ -1017,7 +1627,7 @@ function TaskModal({ task, T, members, projects, currentMember, onClose, onUpdat
 
               {/* Due Date */}
               <div>
-                <label style={{ fontSize: 10, color: T.text3, textTransform: 'uppercase', letterSpacing: 0.5, display: 'block', marginBottom: 4 }}>Due Date</label>
+                <label style={{ fontSize: 9, color: '#71717a', textTransform: 'uppercase', letterSpacing: 0.5, display: 'block', marginBottom: 4 }}>Due Date</label>
                 <div
                   onClick={() => dateInputRef.current?.showPicker()}
                   style={{
@@ -1050,7 +1660,7 @@ function TaskModal({ task, T, members, projects, currentMember, onClose, onUpdat
 
               {/* Project */}
               <div>
-                <label style={{ fontSize: 10, color: T.text3, textTransform: 'uppercase', letterSpacing: 0.5, display: 'block', marginBottom: 4 }}>Project</label>
+                <label style={{ fontSize: 9, color: '#71717a', textTransform: 'uppercase', letterSpacing: 0.5, display: 'block', marginBottom: 4 }}>Project</label>
                 <ModalDropdown
                   value={projectId}
                   options={projectOptions}
@@ -1072,12 +1682,11 @@ function TaskModal({ task, T, members, projects, currentMember, onClose, onUpdat
               </div>
             </div>
           </div>
-        </div>
 
         {/* Modal Footer */}
         <div style={{
-          padding: '14px 24px',
-          borderTop: `1px solid ${T.border}`,
+          padding: '12px 24px',
+          borderTop: `0.5px solid ${T.border}`,
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center'

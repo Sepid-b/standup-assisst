@@ -79,3 +79,89 @@ export async function createComment(taskId, memberId, content) {
   })
   return res.json()
 }
+
+// ==================== TAGS API ====================
+
+export async function fetchAllTags() {
+  const res = await fetch(`${API_BASE}/tags`)
+  return res.json()
+}
+
+export async function createTag(name, createdBy, color) {
+  const res = await fetch(`${API_BASE}/tags`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, created_by: createdBy, color })
+  })
+  return res.json()
+}
+
+export async function fetchTaskTags(taskId) {
+  const res = await fetch(`${API_BASE}/tasks/${taskId}/tags`)
+  return res.json()
+}
+
+export async function addTagToTask(taskId, tagId) {
+  const res = await fetch(`${API_BASE}/tasks/${taskId}/tags`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tag_id: tagId })
+  })
+  return res.json()
+}
+
+export async function removeTagFromTask(taskId, tagId) {
+  const res = await fetch(`${API_BASE}/tasks/${taskId}/tags/${tagId}`, {
+    method: 'DELETE'
+  })
+  return res.json()
+}
+
+// ==================== DOCS API ====================
+
+export async function fetchTaskDocs(taskId) {
+  const res = await fetch(`${API_BASE}/tasks/${taskId}/docs`)
+  return res.json()
+}
+
+export async function addDoc(taskId, title, url, addedBy) {
+  const res = await fetch(`${API_BASE}/tasks/${taskId}/docs`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title, url, added_by: addedBy })
+  })
+  return res.json()
+}
+
+export async function deleteDoc(docId) {
+  const res = await fetch(`${API_BASE}/docs/${docId}`, {
+    method: 'DELETE'
+  })
+  return res.json()
+}
+
+// ==================== ATTACHMENTS API ====================
+
+export async function fetchTaskAttachments(taskId) {
+  const res = await fetch(`${API_BASE}/tasks/${taskId}/attachments`)
+  return res.json()
+}
+
+export async function uploadAttachment(taskId, file, uploadedBy, onProgress) {
+  const formData = new FormData()
+  formData.append('file', file)
+  formData.append('uploaded_by', uploadedBy)
+
+  const res = await fetch(`${API_BASE}/tasks/${taskId}/attachments`, {
+    method: 'POST',
+    body: formData
+  })
+  return res.json()
+}
+
+export async function deleteAttachment(attachmentId) {
+  const res = await fetch(`${API_BASE}/attachments/${attachmentId}`, {
+    method: 'DELETE'
+  })
+  return res.json()
+}

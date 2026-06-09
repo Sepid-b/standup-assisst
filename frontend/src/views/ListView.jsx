@@ -1,5 +1,10 @@
 import { useState, useEffect, useRef } from 'react'
-import { updateTask, deleteTask, fetchComments, createComment } from '../api'
+import {
+  updateTask, deleteTask, fetchComments, createComment,
+  fetchAllTags, createTag, fetchTaskTags, addTagToTask, removeTagFromTask,
+  fetchTaskDocs, addDoc, deleteDoc,
+  fetchTaskAttachments, uploadAttachment, deleteAttachment
+} from '../api'
 
 const STATUSES = [
   { id: 'todo', label: 'To Do', color: '#71717a' },
@@ -16,6 +21,234 @@ const PRIORITIES = [
   { id: 'medium', label: 'Medium', color: '#f39c12' },
   { id: 'low', label: 'Low', color: '#2ecc71' }
 ]
+
+const STATUS_COLORS = {
+  todo: '#71717a',
+  in_progress: '#7c6bf0',
+  in_review: '#f39c12',
+  blocked: '#e74c3c',
+  done: '#a1a1aa'
+}
+
+// Helper functions
+function formatFileSize(bytes) {
+  if (!bytes) return ''
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+function getDocIcon(url) {
+  if (url?.includes('figma.com')) return { icon: 'ti-brand-figma', color: '#a259ff' }
+  if (url?.includes('docs.google.com')) return { icon: 'ti-file-text', color: '#4285f4' }
+  return { icon: 'ti-link', color: '#2ecc71' }
+}
+
+function getAttachmentIcon(mimeType) {
+  if (mimeType?.startsWith('image/')) return { icon: 'ti-photo', color: '#2ecc71' }
+  if (mimeType === 'application/pdf') return { icon: 'ti-file-type-pdf', color: '#e74c3c' }
+  return { icon: 'ti-file', color: '#71717a' }
+}
+
+// Color options for tag picker
+const TAG_COLOR_OPTIONS = [
+  '#a259ff', '#f0b95a', '#e74c3c', '#2ecc71', '#5dade2',
+  '#7c6bf0', '#e84393', '#f39c12', '#1abc9c', '#9b59b6'
+]
+
+// Tag picker component
+function TagPicker({ taskTags, allTags, onAdd, onRemove, onCreate, T }) {
+  const [open, setOpen] = useState(false)
+  const [search, setSearch] = useState('')
+  const [selectedColor, setSelectedColor] = useState(TAG_COLOR_OPTIONS[0])
+  const [showCreateForm, setShowCreateForm] = useState(false)
+  const ref = useRef()
+
+  useEffect(() => {
+    const handleClick = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [])
+
+  const filteredTags = allTags.filter(t => t.name.toLowerCase().includes(search.toLowerCase()))
+  const taskTagIds = taskTags.map(t => t.id)
+  const canCreate = search && !allTags.some(t => t.name.toLowerCase() === search.toLowerCase())
+
+  const handleTagClick = (tag) => {
+    if (taskTagIds.includes(tag.id)) {
+      onRemove(tag.id)
+    } else {
+      onAdd(tag.id)
+    }
+  }
+
+  const handleCreate = async () => {
+    if (!search.trim()) return
+    await onCreate(search.trim(), selectedColor)
+    setSearch('')
+    setShowCreateForm(false)
+    setSelectedColor(TAG_COLOR_OPTIONS[0])
+  }
+
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <button
+        onClick={() => setOpen(!open)}
+        style={{
+          padding: '3px 9px',
+          borderRadius: 20,
+          fontSize: 10,
+          border: `1px dashed ${T.border}`,
+          color: T.text3,
+          background: 'none',
+          cursor: 'pointer'
+        }}
+      >
+        + Add tag
+      </button>
+      {open && (
+        <div style={{
+          position: 'absolute',
+          top: '100%',
+          left: 0,
+          marginTop: 6,
+          background: T.bg2,
+          border: `0.5px solid ${T.border}`,
+          borderRadius: 8,
+          padding: 6,
+          minWidth: 200,
+          zIndex: 20,
+          boxShadow: '0 4px 16px rgba(0,0,0,0.3)'
+        }}>
+          <input
+            value={search}
+            onChange={e => { setSearch(e.target.value); setShowCreateForm(false) }}
+            placeholder="Search or create tag..."
+            autoFocus
+            style={{
+              width: '100%',
+              padding: '6px 8px',
+              background: '#18181b',
+              border: `0.5px solid ${T.border}`,
+              borderRadius: 5,
+              color: T.text,
+              fontSize: 11,
+              marginBottom: 6,
+              outline: 'none'
+            }}
+          />
+          <div style={{ maxHeight: 150, overflowY: 'auto' }}>
+            {filteredTags.map(tag => (
+              <div
+                key={tag.id}
+                onClick={() => handleTagClick(tag)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '5px 8px',
+                  borderRadius: 4,
+                  cursor: 'pointer'
+                }}
+                onMouseEnter={e => e.currentTarget.style.background = T.bg3}
+                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+              >
+                <input type="checkbox" checked={taskTagIds.includes(tag.id)} readOnly style={{ accentColor: T.purple }} />
+                <div style={{ width: 10, height: 10, borderRadius: '50%', background: tag.color }} />
+                <span style={{ fontSize: 11, color: T.text }}>{tag.name}</span>
+              </div>
+            ))}
+            {filteredTags.length === 0 && !canCreate && (
+              <div style={{ padding: '8px', color: T.text3, fontSize: 11, textAlign: 'center' }}>
+                No tags yet
+              </div>
+            )}
+          </div>
+          {canCreate && (
+            <>
+              <div style={{ height: 1, background: T.border, margin: '6px 0' }} />
+              {!showCreateForm ? (
+                <div
+                  onClick={() => setShowCreateForm(true)}
+                  style={{
+                    padding: '5px 8px',
+                    borderRadius: 4,
+                    cursor: 'pointer',
+                    color: T.purple,
+                    fontSize: 11,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.background = T.bg3}
+                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                >
+                  <div style={{ width: 10, height: 10, borderRadius: '50%', background: selectedColor }} />
+                  + Create "{search}"
+                </div>
+              ) : (
+                <div style={{ padding: '6px 0' }}>
+                  <div style={{ fontSize: 10, color: T.text3, marginBottom: 6 }}>Pick a color:</div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+                    {TAG_COLOR_OPTIONS.map(color => (
+                      <div
+                        key={color}
+                        onClick={() => setSelectedColor(color)}
+                        style={{
+                          width: 20,
+                          height: 20,
+                          borderRadius: '50%',
+                          background: color,
+                          cursor: 'pointer',
+                          border: selectedColor === color ? '2px solid #fff' : '2px solid transparent',
+                          boxShadow: selectedColor === color ? '0 0 0 1px ' + color : 'none'
+                        }}
+                      />
+                    ))}
+                  </div>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <button
+                      onClick={handleCreate}
+                      style={{
+                        flex: 1,
+                        padding: '5px 10px',
+                        background: selectedColor,
+                        border: 'none',
+                        borderRadius: 4,
+                        color: '#fff',
+                        fontSize: 10,
+                        cursor: 'pointer',
+                        fontWeight: 500
+                      }}
+                    >
+                      Create "{search}"
+                    </button>
+                    <button
+                      onClick={() => setShowCreateForm(false)}
+                      style={{
+                        padding: '5px 10px',
+                        background: 'transparent',
+                        border: `1px solid ${T.border}`,
+                        borderRadius: 4,
+                        color: T.text3,
+                        fontSize: 10,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
 
 function Dropdown({ value, options, onChange, placeholder, T, renderOption }) {
   const [open, setOpen] = useState(false)
@@ -284,7 +517,9 @@ function MentionInput({ value, onChange, onSubmit, placeholder, T, members }) {
 // Custom dropdown for modal fields
 function ModalDropdown({ value, options, onChange, T, renderValue, renderOption }) {
   const [open, setOpen] = useState(false)
+  const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0, width: 0 })
   const ref = useRef()
+  const triggerRef = useRef()
 
   useEffect(() => {
     const handleClick = (e) => {
@@ -294,12 +529,25 @@ function ModalDropdown({ value, options, onChange, T, renderValue, renderOption 
     return () => document.removeEventListener('mousedown', handleClick)
   }, [])
 
+  const handleOpen = () => {
+    if (triggerRef.current) {
+      const rect = triggerRef.current.getBoundingClientRect()
+      setMenuPosition({
+        top: rect.bottom + 4,
+        left: rect.left,
+        width: rect.width
+      })
+    }
+    setOpen(!open)
+  }
+
   const selected = options.find(o => o.id === value)
 
   return (
     <div ref={ref} style={{ position: 'relative' }}>
       <div
-        onClick={() => setOpen(!open)}
+        ref={triggerRef}
+        onClick={handleOpen}
         style={{
           display: 'flex',
           alignItems: 'center',
@@ -317,16 +565,15 @@ function ModalDropdown({ value, options, onChange, T, renderValue, renderOption 
       </div>
       {open && (
         <div style={{
-          position: 'absolute',
-          top: '100%',
-          left: 0,
-          right: 0,
-          marginTop: 4,
+          position: 'fixed',
+          top: menuPosition.top,
+          left: menuPosition.left,
+          width: menuPosition.width,
           background: T.bg2,
           border: `1px solid ${T.border}`,
           borderRadius: 6,
           padding: 4,
-          zIndex: 200,
+          zIndex: 300,
           boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
           maxHeight: 200,
           overflowY: 'auto'
@@ -355,6 +602,7 @@ function ModalDropdown({ value, options, onChange, T, renderValue, renderOption 
 
 // Redesigned TaskModal with full features
 function TaskModal({ task, T, members, projects, currentMember, onClose, onUpdate, onDelete }) {
+  // Core task state
   const [title, setTitle] = useState(task.title)
   const [editedTitle, setEditedTitle] = useState(task.title)
   const [description, setDescription] = useState(task.description || '')
@@ -366,21 +614,41 @@ function TaskModal({ task, T, members, projects, currentMember, onClose, onUpdat
   const [editingTitle, setEditingTitle] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+
+  // Tags state
+  const [taskTags, setTaskTags] = useState([])
+  const [allTags, setAllTags] = useState([])
+
+  // Docs state
+  const [docs, setDocs] = useState([])
+  const [showAddLink, setShowAddLink] = useState(false)
+  const [newDocTitle, setNewDocTitle] = useState('')
+  const [newDocUrl, setNewDocUrl] = useState('')
+
+  // Attachments state
+  const [attachments, setAttachments] = useState([])
+  const [showUpload, setShowUpload] = useState(false)
+  const [uploading, setUploading] = useState(false)
+
+  // Comments state
   const [comments, setComments] = useState([])
   const [newComment, setNewComment] = useState('')
   const [sendingComment, setSendingComment] = useState(false)
 
   const dateInputRef = useRef()
+  const fileInputRef = useRef()
   const project = projects.find(p => p.id === projectId)
 
+  // Load all data on mount
   useEffect(() => {
-    loadComments()
+    Promise.all([
+      fetchTaskTags(task.id).then(setTaskTags),
+      fetchAllTags().then(setAllTags),
+      fetchTaskDocs(task.id).then(setDocs),
+      fetchTaskAttachments(task.id).then(setAttachments),
+      fetchComments(task.id).then(setComments)
+    ])
   }, [task.id])
-
-  const loadComments = async () => {
-    const data = await fetchComments(task.id)
-    setComments(data)
-  }
 
   const handleOverlayClick = (e) => {
     if (e.target === e.currentTarget) onClose()
@@ -408,7 +676,7 @@ function TaskModal({ task, T, members, projects, currentMember, onClose, onUpdat
       due_date: dueDate || null
     }
     const updated = await updateTask(task.id, updates)
-    onUpdate(updated)
+    onUpdate({ ...updated, tags: taskTags })
     setIsSaving(false)
     onClose()
   }
@@ -419,16 +687,64 @@ function TaskModal({ task, T, members, projects, currentMember, onClose, onUpdat
     onClose()
   }
 
+  // Tag handlers
+  const handleAddTag = async (tagId) => {
+    const tag = await addTagToTask(task.id, tagId)
+    setTaskTags(prev => [...prev, tag])
+  }
+
+  const handleRemoveTag = async (tagId) => {
+    await removeTagFromTask(task.id, tagId)
+    setTaskTags(prev => prev.filter(t => t.id !== tagId))
+  }
+
+  const handleCreateTag = async (name, color) => {
+    const tag = await createTag(name, currentMember?.id, color)
+    setAllTags(prev => [...prev, tag])
+    await handleAddTag(tag.id)
+  }
+
+  // Doc handlers
+  const handleAddDoc = async () => {
+    if (!newDocTitle.trim() || !newDocUrl.trim()) return
+    const doc = await addDoc(task.id, newDocTitle.trim(), newDocUrl.trim(), currentMember?.id)
+    setDocs(prev => [...prev, doc])
+    setNewDocTitle('')
+    setNewDocUrl('')
+    setShowAddLink(false)
+  }
+
+  const handleDeleteDoc = async (docId) => {
+    await deleteDoc(docId)
+    setDocs(prev => prev.filter(d => d.id !== docId))
+  }
+
+  // Attachment handlers
+  const handleFileSelect = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploading(true)
+    const attachment = await uploadAttachment(task.id, file, currentMember?.id)
+    setAttachments(prev => [...prev, attachment])
+    setUploading(false)
+    setShowUpload(false)
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }
+
+  const handleDeleteAttachment = async (attachmentId) => {
+    await deleteAttachment(attachmentId)
+    setAttachments(prev => prev.filter(a => a.id !== attachmentId))
+  }
+
+  // Comment handlers
   const handleSendComment = async () => {
     if (!newComment.trim() || !currentMember) return
     setSendingComment(true)
     const comment = await createComment(task.id, currentMember.id, newComment.trim())
-    const newComments = [...comments, comment]
-    setComments(newComments)
+    setComments(prev => [...prev, comment])
     setNewComment('')
     setSendingComment(false)
-    // Update task's comment count in parent
-    onUpdate({ ...task, comment_count: newComments.length })
+    onUpdate({ ...task, comment_count: comments.length + 1 })
   }
 
   const formatDate = (dateStr) => {
@@ -1068,12 +1384,47 @@ export default function ListView({ T, currentMember, members, projects, tasks, o
                     color: isDone ? T.text3 : T.text,
                     textDecoration: isDone ? 'line-through' : 'none'
                   }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      {task.title}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                      <span>{task.title}</span>
+                      {task.tags && task.tags.length > 0 && (
+                        <>
+                          {task.tags.slice(0, 3).map(tag => (
+                            <span
+                              key={tag.id}
+                              style={{
+                                padding: '2px 6px',
+                                borderRadius: 10,
+                                fontSize: 9,
+                                background: `${tag.color}25`,
+                                color: tag.color
+                              }}
+                            >
+                              {tag.name}
+                            </span>
+                          ))}
+                          {task.tags.length > 3 && (
+                            <span style={{
+                              padding: '2px 6px',
+                              borderRadius: 10,
+                              fontSize: 9,
+                              background: T.bg3,
+                              color: T.text3
+                            }}>
+                              +{task.tags.length - 3}
+                            </span>
+                          )}
+                        </>
+                      )}
                       {task.comment_count > 0 && (
                         <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
                           <i className="ti ti-message" style={{ fontSize: 11, color: T.text3 }} />
                           <span style={{ fontSize: 9, color: T.text3 }}>{task.comment_count}</span>
+                        </div>
+                      )}
+                      {task.docs_count > 0 && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+                          <i className="ti ti-link" style={{ fontSize: 11, color: T.text3 }} />
+                          <span style={{ fontSize: 9, color: T.text3 }}>{task.docs_count}</span>
                         </div>
                       )}
                     </div>
